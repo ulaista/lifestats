@@ -4,7 +4,7 @@
 расходы, задачи и встречи — в одном боте и полноэкранном Mini App. Данные принадлежат вам: вы сами
 поднимаете сервер (бесплатно), подключаете нужные сервисы и решаете, что куда уходит.
 
-> **English summary.** A self-hosted Telegram bot + Mini App that turns your Apple Health, calendar, reminders,
+> **English summary.** A self-hosted Telegram bot + Mini App that turns your Apple Health or Android Health Connect, calendar, reminders,
 > screen time, music and spending into a private dashboard, with an AI assistant (any OpenAI-compatible LLM,
 > Groq's free tier by default) that keeps your tasks, plans your day and answers in plain language.
 > Free stack: Vercel + Turso + Groq + cron-job.org, or one Docker container with SQLite. Docs are in Russian.
@@ -24,9 +24,12 @@
 - Регулярные действия: по расписанию, слежка за публичными Telegram-каналами, поиск в интернете с присылкой только нового.
 - Пересылка сообщений → задачи с датами. Inline-режим: `@ваш_бот план` в любом чате.
 
-**Связь с iPhone** (через бесплатные «Команды»)
-- Apple Health (сон, шаги, калории), Календарь (в обе стороны), «Напоминания» (в обе стороны),
+**Связь с телефоном**
+- **iPhone** (бесплатные «Команды»): Apple Health (сон, шаги, калории), Календарь и «Напоминания» в обе стороны,
   экранное время по приложениям, Siri-ассистент голосом.
+- **Android**: Health Connect (Samsung Health, Google Fit, Fitbit, часы…) через приложение HC Webhook,
+  экранное время через MacroDroid/Tasker, голосовой ассистент через HTTP Shortcuts.
+- **Любой календарь по ссылке iCal** (Google, iCloud, Outlook) — сервер забирает его сам, без автоматизаций.
 
 **Надёжность и безопасность**
 - Сторож раз в день проверяет все источники и пишет, если что-то сломалось; `/status` — проверка в любой момент.
@@ -56,7 +59,7 @@ cron (каждую минуту) ──▶ /tick: напоминания, рег
 | HTTPS для Telegram | есть у Vercel | нужен прокси/туннель (Caddy, Cloudflare Tunnel) |
 | Инструкция | [docs/setup-cloud.md](docs/setup-cloud.md) | [docs/self-host.md](docs/self-host.md) |
 
-Дальше: [подключение iPhone](docs/iphone-shortcuts.md) · [ассистент и ИИ-провайдеры](docs/assistant.md) ·
+Дальше: [подключение iPhone](docs/iphone-shortcuts.md) · [подключение Android](docs/android.md) · [ассистент и ИИ-провайдеры](docs/assistant.md) ·
 [безопасность, приватность, бэкапы](docs/privacy-security.md) · [расписания и автоматизации](automations/).
 
 Нужен Node.js 22+ и аккаунт Telegram. Все платные сервисы необязательны: ассистент работает с Groq бесплатно,
@@ -65,7 +68,7 @@ cron (каждую минуту) ──▶ /tick: напоминания, рег
 ## Команды бота
 
 `/app` дашборд · `/plan` план на сегодня · `/tasks` задачи · `/money` расходы · `/routines` регулярные действия ·
-`/calendar` связь с Календарём и ключ для «Команд» · `/siri` ключ для Siri · `/status` проверка всех источников ·
+`/calendar` связь с Календарём и ключ для «Команд» · `/ical` календари по ссылке · `/siri` ключ для Siri · `/status` проверка всех источников ·
 `/backup` резервная копия · `/forget` забыть разговор · `/help`. Всё остальное — обычным сообщением или голосом.
 
 ## Структура
@@ -76,7 +79,7 @@ server/
   bot/              Telegram-бот: команды, ассистент, напоминания, /tick
   app/              Mini App (index.html) и его API
   plan/             задачи, ассистент, разборы, бюджеты, расписание, сторож, регулярные действия
-  import/           приём данных: Health, сон/шаги из «Команд», экранное время, Last.fm
+  import/           приём данных: Apple Health, Health Connect, календари iCal, экранное время, Last.fm
   stats/            расчёт экранов и графиков
 selfhost/server.mjs свой сервер с встроенным планировщиком
 scripts/            настройка вебхука, cron-job.org, привязка бота, восстановление бэкапа

@@ -8,6 +8,8 @@
 | Свой сервер: Mac | [macos/dev.lifestats.plist](macos/dev.lifestats.plist) | автозапуск при входе (launchd) |
 | Docker | `Dockerfile`, `docker-compose.yml` | один контейнер со встроенным планировщиком |
 | iPhone «Команды» | [../docs/iphone-shortcuts.md](../docs/iphone-shortcuts.md) | здоровье, календарь, напоминания, экранное время, Siri |
+| Android | [../docs/android.md](../docs/android.md) | Health Connect (HC Webhook), MacroDroid/Tasker, HTTP Shortcuts |
+| Календари по ссылке | команда `/ical` или `CALENDAR_ICS_URLS` | Google/iCloud/Outlook, обновление раз в час |
 | Вебхук и меню бота | `scripts/cloud-setup.ts <URL>` | после деплоя и при смене адреса |
 | Привязка бота | `npm run pair` | одноразовый код для `/start` |
 | Восстановление бэкапа | `npm run backup:restore -- файл.lsb [--apply]` | из файла, который бот присылает раз в неделю |
@@ -17,6 +19,7 @@
 | Время | Что |
 |---|---|
 | каждую минуту | напоминания о делах, повторы, регулярные действия по их расписанию |
+| раз в час | календари по ссылке iCal |
 | 08:00 (меняется) | план на день + утренний разбор |
 | 10:00 | подписки: напоминание накануне, запись списания в день списания |
 | 12:00 | сторож (пишет только при поломке) |

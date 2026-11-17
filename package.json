@@ -27,6 +27,7 @@
     "backup:restore": "node --no-warnings scripts/restore-backup.ts",
     "pair": "node --no-warnings scripts/pair.ts",
     "serve": "npm run build:cloud && node --no-warnings selfhost/server.mjs",
+    "deploy": "sh scripts/vercel-deploy.sh",
     "build:cloud": "esbuild server/cloud/vercel.ts --bundle --platform=node --format=esm --target=node22 --outfile=api/index.mjs --external:libsql --loader:.html=text --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\""
   },
   "dependencies": {

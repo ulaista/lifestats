@@ -4,6 +4,7 @@
 //   POST /tg               Telegram webhook (secret token header required)
 //   POST /ingest           health data from the iPhone (Bearer INGEST_TOKEN)
 //   POST /screen           {app[, event]} from iPhone app open/close automations (Bearer INGEST_TOKEN)
+//   POST /hc               Android Health Connect via the «HC Webhook» app (Bearer INGEST_TOKEN)
 //   POST /health           { sleep, steps, energy, distance } sample lines from a Shortcut (Bearer INGEST_TOKEN)
 //   POST /sleep            sleep samples straight from Apple Health (Shortcut, Bearer INGEST_TOKEN)
 //   GET  /cron             daily summaries (Vercel Cron, Bearer CRON_SECRET)
@@ -23,6 +24,7 @@ import { transcribe } from '../plan/voice.ts';
 import { Bot } from '../bot/bot.ts';
 import { ingestHealthExport, isHealthExport } from '../import/healthexport.ts';
 import { ingestHealthAutoExport } from '../import/hae.ts';
+import { ingestHealthConnect, isHealthConnect } from '../import/health-connect.ts';
 import { parseSleepText, syncSleep, syncHealth } from '../import/health-sleep.ts';
 import { makeDigest } from '../plan/digest.ts';
 import { screenEvent } from '../import/screen-events.ts';
@@ -81,11 +83,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       return json(res, 200, { ok: true });
     }
 
-    if (path === '/ingest' && req.method === 'POST') {
+    if ((path === '/ingest' || path === '/hc') && req.method === 'POST') {
       const want = process.env.INGEST_TOKEN ?? '';
       if (!want || !safeEqual(bearer(req), want)) return json(res, 403, { error: 'forbidden' });
       const data = JSON.parse(await body(req));
-      const r = isHealthExport(data) ? ingestHealthExport(data) : ingestHealthAutoExport(data);
+      const r = isHealthExport(data) ? ingestHealthExport(data) : path === '/hc' || isHealthConnect(data) ? ingestHealthConnect(data) : ingestHealthAutoExport(data);
       kvSet('hae:last', new Date().toISOString());
       bump();
       return json(res, 200, { ok: true, ...r });

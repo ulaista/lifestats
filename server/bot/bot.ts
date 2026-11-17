@@ -21,6 +21,7 @@ import { dueDigest, makeDigest, digestHtml } from '../plan/digest.ts';
 import { runChecks, statusHtml, alertFor } from '../plan/watchdog.ts';
 import { runSubs } from '../plan/budget.ts';
 import { makeBackup } from '../backup.ts';
+import { icsUrls, addIcsUrl, removeIcsUrl, syncIcs, maskUrl } from '../import/ics-import.ts';
 
 /** A forwarded message may only create records from its content — never edit or delete existing ones. */
 const FORWARD_TOOLS = ['add_item', 'find_items', 'show_plan', 'add_reminder'];
@@ -32,7 +33,7 @@ import { feedKey } from '../plan/ics.ts';
 const COMMANDS: [string, string][] = [
   ['plan', 'План на сегодня'], ['tasks', 'Все задачи'], ['money', 'Расходы за месяц'], ['calendar', 'Связь с Календарём iPhone'], ['routines', 'Регулярные действия'], ['app', 'Открыть дашборд'], ['menu', 'Дашборд в чате'], ['today', 'Сегодня текстом'], ['week', 'Неделя'], ['month', 'Месяц'], ['year', 'Год'], ['all', 'За всё время'],
   ['sleep', 'Сон'], ['activity', 'Активность'], ['heart', 'Сердце'], ['workouts', 'Тренировки'], ['music', 'Музыка'],
-  ['status', 'Проверка: всё ли работает'], ['siri', 'Ключ для команды Siri'], ['backup', 'Резервная копия базы'], ['shortcut', 'Ключ для команд iPhone'],
+  ['ical', 'Календари по ссылке (Google, iCloud, Outlook)'], ['status', 'Проверка: всё ли работает'], ['siri', 'Ключ для команды Siri'], ['backup', 'Резервная копия базы'], ['shortcut', 'Ключ для команд iPhone'],
   ['reports', 'Автосводки вкл/выкл'], ['forget', 'Забыть разговор'], ['help', 'Помощь'],
 ];
 const SECTION_CMD: Record<string, Section> = { sleep: 'sleep', activity: 'steps', steps: 'steps', heart: 'heart', workouts: 'workouts', music: 'music', screen: 'screen' };
@@ -142,6 +143,7 @@ export class Bot {
     if (cmd === 'calendar') return this.send(chatId, this.calendarText());
     if (cmd === 'siri') return this.send(chatId, this.siriText());
     if (cmd === 'backup') return this.sendBackup(chatId);
+    if (cmd === 'ical') return this.icalCommand(chatId, String(msg.text ?? '').replace(/^\/ical(@\S+)?\s*/i, ''));
     if (cmd === 'routines') return this.sendRoutines(chatId);
     if (cmd === 'money') return this.send(chatId, esc(statsText('money', 'month')));
     if (cmd === 'forget') { resetHistory(); return this.send(chatId, '🧹 Разговор забыт. Задачи и встречи на месте.'); }
@@ -557,6 +559,11 @@ export class Bot {
       kvSet('backup:last', new Date().toISOString()); // claim first: never resend every minute on failure
       await this.sendBackup(owner).then(() => sent++).catch((e) => console.error('[backup]', e.message));
     }
+    // Calendars by iCal link: refresh hourly.
+    if (icsUrls().length && Date.now() - (Date.parse(kvGet('calendar:ics:fetch') ?? '') || 0) > 55 * 60_000) {
+      kvSet('calendar:ics:fetch', new Date().toISOString());
+      await syncIcs().catch((e) => console.error('[ics]', e.message));
+    }
     // Subscriptions once a day: reminders before a charge, and the charge recorded as an expense.
     if (kvGet('subs:day') !== today && now.slice(11, 16) >= '10:00') {
       kvSet('subs:day', today);
@@ -639,6 +646,28 @@ export class Bot {
 
   /** What the iPhone Shortcut needs to push health data to the cloud (owner only). */
   /** Both directions of the iPhone calendar link: the subscription URL and the Shortcut's endpoint. */
+  /** /ical — calendars by link: list, «/ical add <url>», «/ical del <n>». */
+  private async icalCommand(chatId: number, arg: string) {
+    try {
+      const [verb, ...rest] = arg.trim().split(/\s+/);
+      if (/^(add|добавить|\+)$/i.test(verb ?? '') || /^(https|webcal)/i.test(verb ?? '')) {
+        addIcsUrl(/^(https|webcal)/i.test(verb) ? verb : rest.join(''));
+        const r = await syncIcs();
+        return this.send(chatId, `✅ Календарь подключён: ${r.events} событий на месяц вперёд.${r.errors.length ? `\n⚠️ ${esc(r.errors.join('; '))}` : ''}\nОбновляется раз в час. Сообщение со ссылкой лучше удалить из чата.`);
+      }
+      if (/^(del|rm|удалить|-)$/i.test(verb ?? '')) { removeIcsUrl(Number(rest[0])); await syncIcs(); return this.send(chatId, '🗑 Ссылка убрана.'); }
+      const urls = icsUrls(), last = kvGet('calendar:ics:last'), err = kvGet('calendar:ics:error');
+      return this.send(chatId, [
+        '🗓 <b>Календари по ссылке (iCal)</b>',
+        urls.length ? urls.map((u, i) => `${i + 1}. ${esc(maskUrl(u))}`).join('\n') : 'Пока нет.',
+        last ? `Обновлено: ${tgTime(last)}${err ? `\n⚠️ ${esc(err)}` : ''}` : '',
+        '',
+        'Добавить: <code>/ical add ссылка</code> — Google Календарь: Настройки → календарь → «Секретный адрес в формате iCal»; iCloud: публичный календарь → ссылка webcal://; Outlook: «Опубликовать календарь» → ICS.',
+        'Убрать: <code>/ical del номер</code>',
+      ].filter(Boolean).join('\n'));
+    } catch (e) { return this.send(chatId, `⚠️ ${esc((e as Error).message)}`); }
+  }
+
   /** Encrypted database backup as a file in the chat. */
   async sendBackup(chatId: number) {
     try {

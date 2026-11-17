@@ -7,7 +7,7 @@ import { config } from '../server/config.ts';
 const { db, cloud, tx } = await import('../server/db.ts');
 // Modules that create their own tables, so the schema exists before rows go in.
 await import('../server/plan/store.ts'); await import('../server/plan/money.ts'); await import('../server/plan/budget.ts');
-await import('../server/plan/routines.ts'); await import('../server/import/screen-events.ts'); await import('../server/import/mac-music.ts');
+await import('../server/plan/routines.ts'); await import('../server/import/screen-events.ts'); await import('../server/import/mac-music.ts'); await import('../server/import/health-connect.ts');
 const { decrypt, tables } = await import('../server/backup.ts');
 void config;
 

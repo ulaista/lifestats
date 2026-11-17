@@ -70,6 +70,7 @@ export async function runChecks(opts: { network?: boolean; fromCron?: boolean } 
   }
   c.push(feed('health', 'Здоровье с iPhone', 'hae:last', 30, 'запусти команду «lifestats» вручную и проверь её автоматизацию; iPhone должен быть разблокирован в момент запуска', true));
   c.push(feed('calendar', 'Календарь iPhone', 'calendar:icloud:last', 48, 'запусти команду календаря и проверь её автоматизацию'));
+  c.push(feed('calendar_ics', 'Календари по ссылке', 'calendar:ics:last', 6, `не удаётся загрузить: ${kvGet('calendar:ics:error') || 'проверь ссылки командой /ical'}`));
   c.push(feed('reminders', '«Напоминания»', 'reminders:last', 48, 'запусти команду «lifestats reminders» и проверь её автоматизацию'));
   c.push(feed('screen', 'Экранное время', 'screentime:last', 72, 'проверь автоматизации «Приложение открыто/закрыто» в «Командах»'));
   c.push(feed('backup', 'Резервная копия базы', 'backup:last', 9 * 24, 'отправь боту /backup — копия придёт файлом в чат'));

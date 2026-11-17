@@ -97,7 +97,7 @@ export function routineAction(id: number, action: string) {
 /** The Plan tab as native lists: the agenda on the page, one list per KPI in a sheet. */
 function planLists(from: string, to: string) {
   const today = P.todayLocal();
-  const src = (it: P.Item) => (it.source === 'reminders' ? 'Напоминания' : it.source === 'icloud' ? 'Календарь' : '');
+  const src = (it: P.Item) => (it.source === 'reminders' ? 'Напоминания' : it.source === 'icloud' || it.source === 'ics' ? 'Календарь' : '');
   const row = (it: P.Item) => ({
     id: it.id, ic: P.iconOf(it), t: it.title, done: it.status === 'done', pr: it.priority > 0, kind: it.kind, src: it.source ?? '', at: it.at ?? '', rep: it.repeat ? 1 : 0,
     date: it.at ? it.at.slice(0, 10) : '', day: it.at ? dayLabel(it.at.slice(0, 10), today) : 'Без срока',

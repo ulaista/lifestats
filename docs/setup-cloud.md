@@ -65,8 +65,7 @@ npx vercel link          # создать новый проект, корень 
 Деплой (сборка идёт локально, на Vercel уходит готовый `api/index.mjs`):
 
 ```bash
-npm run build:cloud
-npx vercel deploy --prod
+npm run deploy        # = сборка + npx vercel deploy --prod из чистой копии (без .git)
 ```
 
 Адрес вида `https://<ваш-проект>.vercel.app` впишите в `APP_URL` как `https://<ваш-проект>.vercel.app/app`
@@ -103,5 +102,5 @@ Vercel Hobby разрешает только ежедневный cron (он у�
 ## Обновление
 
 ```bash
-git pull && npm install && npm run build:cloud && npx vercel deploy --prod
+git pull && npm install && npm run deploy
 ```

@@ -66,7 +66,9 @@ iCloud Drive → HealthExport → Health. Блок в начало той же �
 **Записи бота → Календарь iPhone.** Команда `/calendar` даёт ссылку на подписку. iPhone: Settings → Apps →
 Calendar → Calendar Accounts → Add Account → Other → **Add Subscribed Calendar** → вставить ссылку.
 
-**Календарь iPhone → бот** (чтобы ассистент знал о ваших встречах) — команда `lifestats calendar`:
+**Календарь → бот** (чтобы ассистент знал о ваших встречах). Проще всего — ссылкой: если календарь в Google или
+опубликован в iCloud, отправьте боту `/ical add <ссылка iCal>`, сервер будет забирать его сам раз в час
+(подробнее в [android.md](android.md#2-календарь-по-ссылке)). Для локальных календарей iPhone — команда `lifestats calendar`:
 1. **Find Calendar Events** — Start Date **is in the next 14 days** (можно добавить и «последний день»).
 2. **Repeat with Each**, внутри **Text**:
    `Start Date` `|` `End Date` `|` `Is All Day` `|` `Calendar` `|` `Location` `|` `Title`.
