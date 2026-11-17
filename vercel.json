@@ -1,0 +1,30 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install --omit=dev",
+  "functions": {
+    "api/index.mjs": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/{libsql,@libsql,@neon-rs,detect-libc}/**"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/index?__path=/"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/api/index?__path=/:path*"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/cron",
+      "schedule": "0 5 * * *"
+    }
+  ],
+  "framework": null,
+  "regions": [
+    "fra1"
+  ]
+}

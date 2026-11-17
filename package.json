@@ -1,0 +1,44 @@
+{
+  "name": "lifestats",
+  "version": "0.1.0",
+  "description": "Self-hosted Telegram bot + Mini App: Apple Health, calendar, reminders, screen time, music and spending as a private dashboard, with an AI assistant.",
+  "license": "MIT",
+  "keywords": [
+    "telegram-bot",
+    "telegram-mini-app",
+    "apple-health",
+    "quantified-self",
+    "dashboard",
+    "ai-assistant",
+    "self-hosted"
+  ],
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --no-warnings server/index.ts",
+    "dev": "node --no-warnings --watch server/index.ts",
+    "import": "node --no-warnings scripts/import.ts",
+    "sample": "node --no-warnings scripts/gen-sample.ts",
+    "preview": "node --no-warnings scripts/widget-preview.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "backup:restore": "node --no-warnings scripts/restore-backup.ts",
+    "pair": "node --no-warnings scripts/pair.ts",
+    "serve": "npm run build:cloud && node --no-warnings selfhost/server.mjs",
+    "build:cloud": "esbuild server/cloud/vercel.ts --bundle --platform=node --format=esm --target=node22 --outfile=api/index.mjs --external:libsql --loader:.html=text --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\""
+  },
+  "dependencies": {
+    "@vercel/functions": "^3.11.3",
+    "csv-parse": "^7.0.3",
+    "libsql": "^0.5.29",
+    "yauzl": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/yauzl": "^3.4.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

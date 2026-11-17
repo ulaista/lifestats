@@ -1,0 +1,19 @@
+# systemd unit for a self-hosted lifestats (Linux VPS / home server).
+#   sudo cp automations/linux/lifestats.service /etc/systemd/system/
+#   edit User= and WorkingDirectory=, then: sudo systemctl enable --now lifestats
+[Unit]
+Description=lifestats Telegram bot and Mini App
+After=network-online.target
+
+[Service]
+Type=simple
+User=lifestats
+WorkingDirectory=/opt/lifestats
+ExecStartPre=/usr/bin/npm run build:cloud
+ExecStart=/usr/bin/node --no-warnings selfhost/server.mjs
+Restart=always
+RestartSec=10
+EnvironmentFile=/opt/lifestats/.env
+
+[Install]
+WantedBy=multi-user.target

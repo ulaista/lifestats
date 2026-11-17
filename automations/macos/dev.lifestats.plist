@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Runs a self-hosted lifestats on a Mac at login.
+     Replace __PROJECT_DIR__ with the absolute path to your checkout, then:
+       cp automations/macos/dev.lifestats.plist ~/Library/LaunchAgents/
+       launchctl load ~/Library/LaunchAgents/dev.lifestats.plist -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.lifestats</string>
+  <key>WorkingDirectory</key><string>__PROJECT_DIR__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string><string>-lc</string>
+    <string>npm run build:cloud &amp;&amp; exec caffeinate -is node --no-warnings selfhost/server.mjs</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/lifestats.log</string>
+  <key>StandardErrorPath</key><string>/tmp/lifestats.log</string>
+</dict>
+</plist>

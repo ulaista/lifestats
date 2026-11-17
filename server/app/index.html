@@ -1,0 +1,1360 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>lifestats</title>
+<script src="https://telegram.org/js/telegram-web-app.js?59"></script>
+<style>
+/* Apple-style: system font, size-specific tracking, translucent chrome, instant press feedback,
+   1:1 swipe between periods with springs and rubber-banding. */
+:root {
+  /* motion tokens (Emil Kowalski): strong ease-out for UI, iOS drawer curve */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --bg: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  --card: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+  --text: var(--tg-theme-text-color, #000000);
+  --hint: var(--tg-theme-hint-color, #8e8e93);
+  --sub: var(--tg-theme-subtitle-text-color, var(--tg-theme-hint-color, #6d6d72));
+  --accent: var(--tg-theme-button-color, #007aff);
+  --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  --link: var(--tg-theme-accent-text-color, var(--tg-theme-link-color, #007aff));
+  --sep: var(--tg-theme-section-separator-color, rgba(60, 60, 67, .18));
+  --good: #248a3d;
+  --bad: #c93400;
+  --fill: rgba(120, 120, 128, .12);
+  --fill-2: rgba(120, 120, 128, .2);
+  --r: 16px;
+  --top-pad: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not(.tg) { --bg: #000; --card: #1c1c1e; --text: #fff; --hint: #8e8e93; --sub: #98989f; --sep: rgba(84, 84, 88, .6); }
+}
+.dark { --good: #30d158; --bad: #ff9f0a; --fill: rgba(120, 120, 128, .24); --fill-2: rgba(120, 120, 128, .32); }
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body {
+  font: 100%/1.4 -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.9375rem; letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none;
+  padding-bottom: calc(2rem + var(--tg-content-safe-area-inset-bottom, 0px) + var(--tg-safe-area-inset-bottom, 0px));
+  overflow-x: hidden; overscroll-behavior-x: none;
+}
+button { font: inherit; letter-spacing: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+/* Feedback on press, instantly */
+.press { transition: transform 160ms var(--ease-out), opacity 160ms var(--ease-out); }
+.press:active { transform: scale(.97); opacity: .85; transition-duration: 60ms; }
+/* big surfaces move less when pressed */
+.scard.press:active, .kpi.press:active, .nv.press:active, .dg .press:active { transform: scale(.985); }
+
+/* ---- floating translucent chrome; content scrolls underneath */
+.top {
+  position: sticky; top: 0; z-index: 10;
+  padding: calc(.625rem + var(--top-pad)) 0 .625rem;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+}
+/* scroll edge effect instead of a hard divider — only once content is underneath */
+.top::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -12px; height: 12px; pointer-events: none;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 70%, transparent), transparent);
+  opacity: 0; transition: opacity 200ms ease;
+}
+.scrolled .top::after { opacity: 1; }
+.tabs { display: flex; gap: .375rem; overflow-x: auto; padding: 0 1rem; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.chip { flex: none; padding: .4375rem .875rem; border-radius: 999px; background: var(--fill); font-size: .875rem; font-weight: 500; letter-spacing: -0.005em; white-space: nowrap; }
+.chip.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+
+/* segmented control with a sliding thumb */
+.seg { position: relative; display: flex; margin: .5rem 1rem 0; padding: 2px; border-radius: 9px; background: var(--fill); }
+.seg .thumb { position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px) / 5); border-radius: 7px; background: var(--card);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .12), 0 3px 1px rgba(0, 0, 0, .04); transition: transform 250ms var(--ease-out); }
+.dark .seg .thumb { background: #636366; }
+.seg button { position: relative; flex: 1; padding: .375rem 0; font-size: .8125rem; font-weight: 500; color: var(--text); }
+.seg button.on { font-weight: 600; }
+
+/* ---- large title */
+.head { display: flex; align-items: flex-end; gap: .5rem; padding: .875rem 1rem .75rem; }
+.head .t { flex: 1; min-width: 0; }
+.ttl { font-size: 2.125rem; line-height: 1.08; font-weight: 700; letter-spacing: -0.022em; }
+.per { color: var(--sub); font-size: .9375rem; margin-top: .125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em; }
+.nav { flex: none; width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--fill); color: var(--link); display: grid; place-items: center; }
+.nav svg { width: 14px; height: 14px; }
+.nav:disabled { opacity: .3; pointer-events: none; }
+.now { display: inline-block; margin-top: .25rem; font-size: .9375rem; color: var(--link); font-weight: 500; }
+.now[hidden] { display: none; }
+
+/* ---- swipeable content pane */
+.viewport { overflow: hidden; touch-action: pan-y; }
+.pane { padding: 0 1rem; will-change: transform; }
+.pane.busy { opacity: .6; transition: opacity 200ms ease 150ms; }
+.fade-in { animation: fadein 220ms ease-out both; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---- KPI cards */
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: .625rem; }
+.kpi { background: var(--card); border-radius: var(--r); padding: .75rem .875rem .8125rem; min-width: 0; }
+.kpi.wide, .kpi.hero { grid-column: 1 / -1; }
+.kpi.hero { padding: 1rem 1rem 1.0625rem; }
+.kpi .l { color: var(--sub); font-size: .8125rem; font-weight: 500; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .v { font-size: 1.375rem; line-height: 1.15; font-weight: 700; margin-top: .25rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi.hero .v { font-size: 2.5rem; line-height: 1.05; letter-spacing: -0.03em; }
+.kpi .m { display: flex; align-items: center; gap: .375rem; margin-top: .375rem; min-height: 1.125rem; font-size: .75rem; color: var(--hint); letter-spacing: .005em; }
+.kpi .m span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl { flex: none; padding: .0625rem .375rem; border-radius: 6px; font-weight: 600; font-size: .75rem; background: var(--fill); color: var(--sub); font-variant-numeric: tabular-nums; }
+.dl.g { color: var(--good); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.dl.b { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+
+/* numbers big, units small */
+.v .u, .sv .u { font-size: .58em; font-weight: 600; letter-spacing: 0; color: var(--sub); }
+
+/* ---- Health-style summary */
+.sum { display: grid; gap: .625rem; }
+.scard { display: block; width: 100%; text-align: left; background: var(--card); border-radius: var(--r); padding: .75rem .875rem .875rem; }
+.sh { display: flex; justify-content: space-between; align-items: center; }
+.sn { color: var(--c); font-weight: 600; font-size: .9375rem; letter-spacing: -0.01em; }
+.chev { width: 7px; height: 7px; border: solid var(--hint); border-width: 0 2px 2px 0; transform: rotate(-45deg); margin-right: 4px; }
+.srow { display: flex; align-items: flex-end; justify-content: space-between; gap: .75rem; margin-top: .5rem; }
+.sl { min-width: 0; }
+.sv { font-size: 1.75rem; line-height: 1.1; font-weight: 700; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ss { display: flex; align-items: center; gap: .375rem; margin-top: .25rem; font-size: .8125rem; color: var(--sub); min-width: 0; }
+.ss span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+svg.spark { flex: none; width: 76px; height: 38px; color: var(--text); }
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: .375rem .75rem; margin-top: .625rem; font-size: .8125rem; }
+.lg { display: flex; align-items: center; gap: .375rem; min-width: 0; }
+.lg .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.lg .ln { color: var(--sub); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lg b { font-weight: 600; font-variant-numeric: tabular-nums; }
+svg.hyp { height: 150px; cursor: default; }
+
+/* ---- chart */
+.card { background: var(--card); border-radius: var(--r); padding: .875rem .875rem .75rem; margin-top: .625rem; }
+.chead { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; }
+.cname { font-weight: 600; font-size: .9375rem; letter-spacing: -0.01em; }
+.cavg { color: var(--hint); font-size: .75rem; white-space: nowrap; }
+.tip { margin-top: .375rem; font-size: .8125rem; color: var(--sub); min-height: 1.125rem; font-variant-numeric: tabular-nums; }
+.tip b { color: var(--text); font-weight: 600; }
+svg.ch { display: block; width: 100%; height: 160px; margin-top: .5rem; touch-action: pan-y; cursor: crosshair; }
+svg.ch text { fill: var(--hint); font-size: 10px; font-family: inherit; letter-spacing: .01em; }
+svg.ch path, svg.ch rect.bar { transition: fill-opacity 120ms ease; }
+
+/* ---- detail blocks */
+.blocks h3 { margin: 1.375rem .25rem .375rem; font-size: .8125rem; font-weight: 400; color: var(--sub); text-transform: uppercase; letter-spacing: .02em; }
+.blocks p { margin: .625rem 0; background: var(--card); border-radius: var(--r); padding: .75rem .875rem; }
+.tw { background: var(--card); border-radius: var(--r); overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .875rem; font-variant-numeric: tabular-nums; }
+td, th { padding: .625rem .875rem; text-align: left; white-space: nowrap; }
+th { color: var(--hint); font-weight: 500; font-size: .75rem; padding-top: .6875rem; padding-bottom: .375rem; letter-spacing: .01em; }
+tr + tr td { box-shadow: inset 0 .5px 0 var(--sep); }
+td.r, th.r { text-align: right; }
+td:first-child { white-space: normal; min-width: 5.5rem; }
+details { background: var(--card); border-radius: var(--r); margin-top: .625rem; overflow: hidden; }
+summary { list-style: none; padding: .8125rem .875rem; font-weight: 500; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+summary:active { background: var(--fill); }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: ""; width: 7px; height: 7px; border: solid var(--hint); border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform 200ms var(--ease-out); margin-right: 4px; }
+details[open] summary::after { transform: rotate(45deg); }
+details .tw, details p { border-radius: 0; margin: 0; box-shadow: inset 0 .5px 0 var(--sep); }
+details h3 { margin: .75rem .875rem .25rem; }
+
+.rt { background: var(--card); border-radius: var(--r); margin-top: .625rem; overflow: hidden; }
+.rt h4 { margin: 0; padding: .8125rem .875rem .25rem; font-size: .9375rem; font-weight: 600; letter-spacing: -0.01em; }
+.rti { display: flex; gap: .75rem; align-items: flex-start; padding: .6875rem .875rem; }
+.rti + .rti { box-shadow: inset 0 .5px 0 var(--sep); }
+.rti.off { opacity: .55; }
+.rti .ic { flex: none; width: 2rem; height: 2rem; border-radius: 9px; display: grid; place-items: center; font-size: 1rem; background: color-mix(in srgb, #AF52DE 14%, transparent); }
+.rti .tx { flex: 1; min-width: 0; }
+.rti .tt { font-weight: 600; font-size: .9375rem; letter-spacing: -0.01em; }
+.rti .wh { font-size: .8125rem; color: var(--sub); margin-top: .125rem; }
+.rti .rs { font-size: .75rem; color: var(--hint); margin-top: .25rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rti .bt { flex: none; display: flex; gap: .375rem; }
+.rti .bt button { width: 2rem; height: 2rem; border-radius: 50%; background: var(--fill); color: var(--text); display: grid; place-items: center; }
+.rti .bt button svg { width: 14px; height: 14px; }
+.rti .bt button:disabled { opacity: .4; }
+.rt .hint { padding: .25rem .875rem .8125rem; font-size: .75rem; color: var(--hint); line-height: 1.45; }
+.empty { background: var(--card); border-radius: var(--r); padding: 1.5rem 1rem; text-align: center; color: var(--sub); line-height: 1.45; }
+.notice { display: flex; gap: .5rem; align-items: flex-start; margin-bottom: .625rem; padding: .625rem .875rem; border-radius: 12px; font-size: .8125rem; line-height: 1.4; color: var(--sub); background: color-mix(in srgb, var(--accent) 12%, var(--card)); }
+.notice::before { content: "ℹ︎"; flex: none; color: var(--link); font-weight: 700; }
+.kpi.tap { cursor: pointer; position: relative; }
+.kpi.tap::after { content: ""; position: absolute; top: .9rem; right: .875rem; width: 6px; height: 6px; border: solid var(--hint); border-width: 0 1.8px 1.8px 0; transform: rotate(-45deg); opacity: .7; }
+.grid.tiles { grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr)); gap: .5rem; }
+.grid.tiles .kpi { padding: .625rem .625rem .6875rem; }
+.grid.tiles .kpi .l { font-size: .75rem; }
+.grid.tiles .kpi .v { font-size: 1.375rem; }
+.grid.tiles .kpi .m { min-height: 0; margin-top: .125rem; }
+.grid.tiles .kpi.tap::after { display: none; }
+
+/* ---- native-style lists */
+.ls { background: var(--card); border-radius: var(--r); margin-top: .625rem; overflow: hidden; }
+.ls h4 { margin: 0; padding: .75rem .875rem .375rem; font-size: .8125rem; font-weight: 600; color: var(--sub); letter-spacing: .005em; }
+.ls h4 + .li { box-shadow: none; }
+.li { display: flex; gap: .625rem; align-items: center; padding: .625rem .875rem; box-shadow: inset 0 .5px 0 var(--sep); min-height: 2.75rem; }
+.li .tm { flex: none; width: 3.25rem; font-size: .8125rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); line-height: 1.25; }
+.li .tm small { display: block; font-weight: 400; color: var(--hint); font-size: .6875rem; }
+.li .ic2 { flex: none; font-size: 1rem; }
+.li .tx { flex: 1; min-width: 0; }
+.li .tt { font-size: .9375rem; line-height: 1.3; letter-spacing: -0.005em; }
+.li.done .tt { color: var(--hint); text-decoration: line-through; }
+.li .sb2 { font-size: .75rem; color: var(--hint); margin-top: .0625rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.li .pr { color: var(--bad); font-weight: 700; margin-left: .25rem; }
+.ls .more { display: block; width: 100%; text-align: left; padding: .6875rem .875rem; color: var(--link); font-weight: 500; font-size: .875rem; box-shadow: inset 0 .5px 0 var(--sep); }
+.nv { display: flex; width: 100%; align-items: center; justify-content: space-between; text-align: left; background: var(--card); border-radius: var(--r); margin-top: .625rem; padding: .8125rem .875rem; font-weight: 500; }
+.nv .chev { flex: none; }
+.nv .cnt { margin-left: auto; margin-right: .625rem; color: var(--hint); font-weight: 400; }
+
+/* ---- bottom sheet */
+.sw { position: fixed; inset: 0; z-index: 50; }
+.sw[hidden] { display: none; }
+.sbk { position: absolute; inset: 0; background: rgba(0, 0, 0, .4); opacity: 0; }
+.sp { position: absolute; left: 0; right: 0; bottom: 0; max-height: calc(100% - var(--top-pad) - 3rem); display: flex; flex-direction: column;
+  background: var(--bg); border-radius: 14px 14px 0 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, .25); will-change: transform; }
+.sgr { flex: none; padding: .5rem 0 .25rem; touch-action: none; cursor: grab; }
+.sgr::before { content: ""; display: block; width: 36px; height: 5px; border-radius: 3px; margin: 0 auto; background: var(--fill-2); }
+.shd { flex: none; display: flex; align-items: center; gap: .5rem; padding: .25rem 1rem .5rem; touch-action: none; }
+.shd .stt { flex: 1; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
+.shd button { color: var(--link); font-weight: 600; font-size: .9375rem; }
+.sc { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 0 1rem calc(1.25rem + var(--tg-safe-area-inset-bottom, 0px) + var(--tg-content-safe-area-inset-bottom, 0px)); }
+.sc > .ls:first-child, .sc > .blocks > :first-child { margin-top: 0; }
+.sc details { margin-top: .625rem; }
+.qa { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .625rem; }
+.qa button { display: flex; align-items: center; justify-content: center; gap: .375rem; padding: .6875rem .5rem; border-radius: 12px; background: var(--card); font-weight: 600; font-size: .875rem; color: var(--link); }
+.li.tap { cursor: pointer; }
+.btns { display: grid; gap: .5rem; margin-top: .75rem; }
+.btn { display: block; width: 100%; padding: .8125rem; border-radius: 12px; background: var(--card); font-weight: 600; font-size: .9375rem; text-align: center; color: var(--link); }
+.btn.primary { background: var(--accent); color: var(--accent-text); }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .5; }
+.chips { display: flex; flex-wrap: wrap; gap: .375rem; margin-top: .5rem; }
+.chips button { padding: .5rem .75rem; border-radius: 999px; background: var(--card); font-size: .875rem; font-weight: 500; }
+.lbl { margin: 1rem .25rem .25rem; font-size: .75rem; color: var(--hint); text-transform: uppercase; letter-spacing: .03em; }
+.info { background: var(--card); border-radius: var(--r); padding: .75rem .875rem; font-size: .875rem; line-height: 1.45; color: var(--sub); }
+.info b { color: var(--text); font-weight: 600; }
+input.dt, textarea.ask { width: 100%; font: inherit; color: var(--text); background: var(--card); border: 0; border-radius: 12px; padding: .75rem .875rem; outline: none; -webkit-user-select: text; user-select: text; }
+textarea.ask { min-height: 5.5rem; resize: none; line-height: 1.4; }
+.askrow { display: flex; gap: .5rem; margin-top: .5rem; }
+.askrow .btn { flex: 1; }
+.mic { flex: none; width: 3rem; border-radius: 12px; background: var(--card); color: var(--link); display: grid; place-items: center; }
+.mic svg { width: 18px; height: 18px; }
+.mic.rec { background: var(--bad); color: #fff; animation: pulse 1.2s infinite ease-in-out; }
+.reply { margin-top: .75rem; background: var(--card); border-radius: var(--r); padding: .75rem .875rem; font-size: .9375rem; line-height: 1.45; white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
+.reply .heard { display: block; color: var(--hint); font-size: .8125rem; margin-bottom: .375rem; }
+.reply .note { display: block; margin-top: .5rem; color: var(--bad); }
+.bud { padding: .625rem .875rem .75rem; box-shadow: inset 0 .5px 0 var(--sep); }
+.ls h4 + .bud { box-shadow: none; }
+.bud .bh { display: flex; justify-content: space-between; gap: .5rem; font-size: .875rem; }
+.bud .bh b { font-weight: 600; }
+.bud .bs { font-size: .75rem; color: var(--hint); margin-top: .125rem; }
+.bar { height: 6px; border-radius: 3px; background: var(--fill); margin-top: .4375rem; overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 3px; background: var(--good); transform-origin: 0 50%; }
+.bar i.warn { background: #ff9f0a; } .bar i.over { background: #ff3b30; }
+.grow-x { animation: growx 400ms var(--ease-out) both; }
+@keyframes growx { from { transform: scaleX(0); } }
+.sub .soon { color: var(--bad); }
+.li.sub .tm { width: auto; max-width: 45%; text-align: right; font-size: .8125rem; }
+.foot { margin-top: 1.25rem; text-align: center; font-size: .75rem; color: var(--hint); line-height: 1.6; letter-spacing: .005em; padding: 0 1rem; }
+.foot .np { color: var(--sub); font-size: .8125rem; }
+.live { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--good); margin-right: 5px; vertical-align: 1px; }
+.live.off { background: var(--hint); }
+
+.sk { background: var(--card); border-radius: var(--r); height: 5.25rem; animation: pulse 1.2s infinite ease-in-out; }
+
+/* ---- AI digest */
+.dg { background: var(--card); border-radius: var(--r); margin-bottom: .625rem; overflow: hidden; }
+.dgh { display: flex; align-items: center; gap: .5rem; padding: .8125rem .875rem .25rem; }
+.dgh .k { flex: 1; min-width: 0; font-weight: 600; font-size: .9375rem; letter-spacing: -0.01em; }
+.dgh .at { color: var(--hint); font-size: .75rem; font-weight: 400; margin-left: .25rem; }
+.mini { display: flex; padding: 2px; border-radius: 8px; background: var(--fill); }
+.mini button { padding: .1875rem .5625rem; border-radius: 6px; font-size: .75rem; font-weight: 500; color: var(--sub); }
+.mini button.on { background: var(--card); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.dark .mini button.on { background: #636366; }
+.rf { flex: none; width: 1.875rem; height: 1.875rem; border-radius: 50%; background: var(--fill); color: var(--link); display: grid; place-items: center; }
+.rf svg { width: 14px; height: 14px; }
+.rf.spin svg { animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.hl { padding: .25rem .875rem .625rem; font-size: 1.0625rem; line-height: 1.3; font-weight: 700; letter-spacing: -0.015em; }
+.fr { display: flex; align-items: center; gap: .625rem; padding: .5625rem .875rem; box-shadow: inset 0 .5px 0 var(--sep); }
+.fi { flex: none; width: 1.875rem; height: 1.875rem; border-radius: 9px; display: grid; place-items: center; background: var(--fill); font-size: .9375rem; }
+.ft { flex: 1; min-width: 0; }
+.fl { font-size: .875rem; font-weight: 500; letter-spacing: -0.005em; }
+.fn { font-size: .75rem; color: var(--hint); margin-top: .0625rem; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.fv { flex: none; font-weight: 700; font-size: .9375rem; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; max-width: 45%; text-align: right; }
+.fv.good { color: var(--good); } .fv.bad { color: var(--bad); }
+.dgs { padding: .625rem .875rem .875rem; box-shadow: inset 0 .5px 0 var(--sep); }
+.dgs h5 { margin: 0 0 .375rem; font-size: .75rem; font-weight: 500; color: var(--hint); text-transform: uppercase; letter-spacing: .03em; }
+.dgs ol, .dgs ul { margin: 0; padding: 0; list-style: none; display: grid; gap: .4375rem; }
+.dgs li { display: flex; gap: .5rem; font-size: .875rem; line-height: 1.4; }
+.dgs li::before { flex: none; content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--hint); margin-top: .45rem; }
+.dgs ol { counter-reset: r; }
+.dgs ol li::before { counter-increment: r; content: counter(r); width: 1.25rem; height: 1.25rem; margin-top: 0; display: grid; place-items: center; font-size: .6875rem; font-weight: 700; color: var(--accent-text); background: var(--accent); }
+.dgf { margin: 0; border-radius: 0; box-shadow: inset 0 .5px 0 var(--sep); }
+.dgf summary { font-size: .875rem; color: var(--sub); }
+.dgf summary .cnt { margin-left: auto; margin-right: .625rem; color: var(--hint); font-weight: 400; font-variant-numeric: tabular-nums; }
+.dge { padding: .25rem .875rem .875rem; font-size: .8125rem; color: var(--sub); line-height: 1.45; }
+.dge button { margin-top: .5rem; padding: .4375rem .875rem; border-radius: 999px; background: var(--accent); color: var(--accent-text); font-weight: 600; font-size: .8125rem; }
+
+/* ---- motion: cards rise in turn, bars grow from the baseline, numbers count up */
+.rise { animation: rise 320ms var(--ease-out) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+/* bars grow from the baseline (first open only); scaleY(0) is fine here — a bar rising from its axis is the point */
+.grow { transform-box: fill-box; transform-origin: 50% 100%; animation: grow 400ms var(--ease-out) both; }
+@keyframes grow { from { transform: scaleY(0); } }
+.sweep { transform-box: fill-box; transform-origin: 0 50%; animation: sweep 360ms var(--ease-out) both; }
+@keyframes sweep { from { transform: scaleX(0); opacity: 0; } }
+.pop { animation: pop 200ms var(--ease-out) both; }
+@keyframes pop { from { transform: scale(.95); opacity: 0; } }
+/* tab switches: the whole chart is revealed bottom-up in one composited motion instead of 60 separate bars */
+svg.reveal { animation: reveal 320ms var(--ease-out) both; }
+@keyframes reveal { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
+.pager { display: flex; justify-content: center; gap: 5px; margin-top: 1rem; }
+.pager i { width: 6px; height: 6px; border-radius: 3px; background: var(--fill-2); transition: width 200ms var(--ease-out), background 200ms ease; }
+.pager i.on { width: 18px; background: var(--accent); }
+@keyframes pulse { 50% { opacity: .55; } }
+
+/* ---- accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .press:active { transform: none; }
+  .seg .thumb, summary::after { transition: none; }
+  .sk { animation: none; }
+  .grow, .sweep, svg.reveal, .rf.spin svg { animation: none; }
+  .rise, .pop { animation: rmfade 200ms ease both; }
+  .press, .press:active { transform: none; }
+}
+@keyframes rmfade { from { opacity: 0; } }
+@media (prefers-reduced-transparency: reduce) {
+  .top { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (prefers-contrast: more) {
+  .kpi, .card, details, .tw, .empty, .dg { box-shadow: 0 0 0 1px var(--sep); }
+  .top { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; border-bottom: 1px solid var(--sep); }
+}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="tabs" id="tabs" role="tablist" aria-label="Разделы"></div>
+  <div class="seg" id="seg" role="tablist" aria-label="Период"><div class="thumb" id="thumb"></div></div>
+</div>
+<div class="head">
+  <div class="t"><div class="ttl" id="ttl">&nbsp;</div><div class="per" id="per">&nbsp;</div><button class="now press" id="now" hidden>К текущему периоду</button></div>
+  <button class="nav press" id="prev" aria-label="Раньше"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2 4 7l5 5"/></svg></button>
+  <button class="nav press" id="next" aria-label="Позже"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 2 5 5-5 5"/></svg></button>
+</div>
+<div class="viewport" id="viewport">
+  <div class="pane" id="pane">
+    <div id="body"><div class="grid"><div class="sk" style="grid-column:1/-1"></div><div class="sk"></div><div class="sk"></div></div></div>
+    <div class="foot" id="foot"></div>
+  </div>
+</div>
+<div class="sw" id="sheet" hidden><div class="sbk" id="sbk"></div><div class="sp" id="sp" role="dialog" aria-modal="true">
+  <div class="sgr" id="sgr"></div><div class="shd" id="shd"><div class="stt" id="stt"></div><button class="press" id="sx">Готово</button></div>
+  <div class="sc" id="sc"></div></div></div>
+<script>
+(function () {
+  'use strict';
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var initData = tg && tg.initData || '';
+  if (tg && tg.initData) document.documentElement.classList.add('tg');
+  var reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var KINDS = [['day', 'День'], ['week', 'Неделя'], ['month', 'Месяц'], ['year', 'Год'], ['all', 'Всё']];
+  var state = { s: 'home', k: 'day', o: 0 };
+  try { var saved = JSON.parse(localStorage.getItem('view') || 'null'); if (saved && saved.s && saved.k) { state.s = saved.s; state.k = saved.k; } } catch (e) {}
+  var data = null, seq = 0, ver = 0, selected = -1, liveOk = false, fellBack = false;
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function haptic(kind) { try { if (!tg || !tg.HapticFeedback) return; if (kind) tg.HapticFeedback.impactOccurred(kind); else tg.HapticFeedback.selectionChanged(); } catch (e) {} }
+  document.addEventListener('touchstart', function () {}, { passive: true }); // enables :active on iOS
+
+  function applyTheme() {
+    var dark = tg && tg.colorScheme ? tg.colorScheme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', dark);
+    if (tg) { try { tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); tg.setBottomBarColor && tg.setBottomBarColor('secondary_bg_color'); } catch (e) {} }
+  }
+
+  // ---------------------------------------------------------------- spring (interruptible, velocity-aware)
+  // Apple's damping ratio + response: damping 1 = no overshoot; 0.8 = a little bounce after a flick.
+  function Spring(onUpdate) { this.x = 0; this.v = 0; this.target = 0; this.raf = 0; this.onUpdate = onUpdate; }
+  Spring.prototype.set = function (x) { cancelAnimationFrame(this.raf); this.raf = 0; this.x = this.target = x; this.v = 0; this.onUpdate(x); };
+  Spring.prototype.to = function (target, opts) {
+    opts = opts || {};
+    var self = this, response = opts.response || 0.35, damping = opts.damping == null ? 1 : opts.damping;
+    if (opts.velocity != null) this.v = opts.velocity;
+    this.target = target; this.done = opts.done;
+    if (reduceMotion) { this.set(target); if (this.done) this.done(); return; }
+    var k = Math.pow(2 * Math.PI / response, 2), c = 4 * Math.PI * damping / response, last = 0;
+    cancelAnimationFrame(this.raf);
+    function step(t) {
+      var dt = last ? Math.min(0.032, (t - last) / 1000) : 1 / 60; last = t;
+      for (var i = 0; i < 4; i++) { var a = -k * (self.x - self.target) - c * self.v; self.v += a * dt / 4; self.x += self.v * dt / 4; }
+      if (Math.abs(self.x - self.target) < 0.4 && Math.abs(self.v) < 8) { self.x = self.target; self.v = 0; self.onUpdate(self.x); self.raf = 0; var d = self.done; self.done = null; if (d) d(); return; }
+      self.onUpdate(self.x); self.raf = requestAnimationFrame(step);
+    }
+    this.raf = requestAnimationFrame(step);
+  };
+  var paneSpring = new Spring(function (x) { $('pane').style.transform = x ? 'translate3d(' + x + 'px,0,0)' : ''; $('pane').style.opacity = x ? String(Math.max(0.35, 1 - Math.abs(x) / innerWidth * 0.9)) : ''; });
+
+  // ---------------------------------------------------------------- API
+  function api(path, method) {
+    return fetch(path, { method: method || 'GET', headers: { Authorization: 'tma ' + initData }, cache: 'no-store' }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
+    });
+  }
+
+  function load(opts) {
+    opts = opts || {};
+    var my = ++seq;
+    if (!opts.silent) $('pane').classList.add('busy');
+    try { localStorage.setItem('view', JSON.stringify({ s: state.s, k: state.k })); } catch (e) {}
+    renderNav();
+    var path = viewPath(state.s, state.k, state.o, opts.fb);
+    var hit = cache[path];
+    var req = hit && hit.ver === ver ? Promise.resolve(hit.d) : api(path).then(function (d) { cache[path] = { ver: d.ver, d: d }; return d; });
+    return req.then(function (d) { return (opts.hold || Promise.resolve()).then(function () { return d; }); }).then(function (d) {
+      if (my !== seq) return;
+      if (d.ver !== ver && ver) { cache = {}; cache[path] = { ver: d.ver, d: d }; } // data changed: everything else is stale
+      setTimeout(prefetch, 250);
+      data = d; ver = d.ver; liveOk = true;
+      if (d.v.o !== state.o) state.o = d.v.o; // empty current period → the server opened the previous one
+      fellBack = !!d.notice;
+      if (!opts.keepSel) selected = -1;
+      render(opts.fade);
+      return d;
+    }).catch(function (e) {
+      if (my !== seq) return;
+      showError(e.message);
+    }).then(function (d) { if (my === seq) $('pane').classList.remove('busy'); return d; });
+  }
+
+  // Screens are cached per data version, and the neighbours of the current tab are fetched ahead,
+  // so a swipe shows the next page at once instead of waiting for the server.
+  var cache = {};
+  function viewPath(s, k, o, fb) { return '/api/view?s=' + s + '&k=' + k + '&o=' + o + (fb && o === 0 ? '&fb=1' : ''); }
+  var prefetching = false;
+  function prefetch() {
+    if (prefetching || !data || !initData) return;
+    var i = secIndex(), secs = data.sections, want = [];
+    [i + 1, i - 1].forEach(function (j) { if (j >= 0 && j < secs.length) want.push(viewPath(secs[j][0], state.k, 0, true)); });
+    want = want.filter(function (p) { return !(cache[p] && cache[p].ver === ver); });
+    if (!want.length) return;
+    prefetching = true;
+    (function next() {
+      var p = want.shift();
+      if (!p) { prefetching = false; return; }
+      api(p).then(function (d) { cache[p] = { ver: d.ver, d: d }; }).catch(function () {}).then(next);
+    })();
+  }
+
+  function go(patch, opts) {
+    for (var k in patch) state[k] = patch[k];
+    if (state.o < 0) state.o = 0;
+    haptic();
+    if (scrollY > 0) window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    return load(opts || { fade: 'soft', fb: 's' in patch || 'k' in patch });
+  }
+
+  /** Sections are pages: swipe left for the next tab, right for the previous one. */
+  function secIndex() { var secs = data ? data.sections : []; for (var i = 0; i < secs.length; i++) if (secs[i][0] === state.s) return i; return 0; }
+  function canSection(dir) { var i = secIndex() - dir, secs = data ? data.sections : []; return i >= 0 && i < secs.length; }
+  /**
+   * Page change: the old page leaves with the finger's velocity; the new one enters from the other side.
+   * New content is rendered only once the old page is off-screen (never on the leaving page); if the
+   * server is slower than the exit, a skeleton enters instead and the content fills in place.
+   */
+  function slidePage(dir, velocity, opts) {
+    var W = innerWidth, left = false, entered = false, release;
+    var hold = new Promise(function (r) { release = r; });
+    function enter() {
+      if (entered) return; entered = true;
+      paneSpring.set(-dir * W * 0.3);
+      paneSpring.to(0, { response: 0.36, damping: 1 });
+    }
+    function gone() {
+      if (left) return; left = true;
+      release();
+      // Data already here → load() renders synchronously after release; otherwise show a skeleton.
+      Promise.resolve().then(function () { if (!entered && $('pane').dataset.loading === '1') skeleton(); enter(); });
+    }
+    paneSpring.to(dir * W, { velocity: velocity, response: 0.26, done: gone });
+    setTimeout(gone, 450); // never leave the content off-screen
+    haptic();
+    if (scrollY > 0) window.scrollTo({ top: 0 });
+    $('pane').dataset.loading = '1';
+    opts.hold = hold; opts.silent = true; opts.fade = 'soft';
+    load(opts).then(function () { $('pane').dataset.loading = ''; });
+  }
+  function skeleton() {
+    var body = $('body'); body.textContent = '';
+    var g = el('div', 'grid');
+    g.appendChild(el('div', 'sk')).style.gridColumn = '1/-1'; g.appendChild(el('div', 'sk')); g.appendChild(el('div', 'sk'));
+    body.appendChild(g);
+  }
+  function shiftSection(dir, velocity) {
+    // dir +1 = previous tab (content leaves to the right), -1 = next tab (leaves to the left)
+    if (!canSection(dir)) return paneSpring.to(0, { velocity: velocity });
+    state.s = data.sections[secIndex() - dir][0]; state.o = 0;
+    slidePage(dir, velocity, { fb: true });
+  }
+
+  /** Period change with spatial consistency: older periods live to the left, newer to the right. */
+  function shiftPeriod(dir, velocity) {
+    // dir +1 = older (content leaves to the right), -1 = newer (leaves to the left)
+    if (dir > 0 && $('prev').disabled) return paneSpring.to(0, { velocity: velocity });
+    if (dir < 0 && state.o === 0) return paneSpring.to(0, { velocity: velocity });
+    state.o += dir;
+    slidePage(dir, velocity, {});
+  }
+
+  // ---------------------------------------------------------------- rendering
+  function renderNav() {
+    var tabs = $('tabs'), seg = $('seg');
+    var secs = data ? data.sections : [['home', '📊 Обзор']];
+    tabs.textContent = '';
+    secs.forEach(function (s) {
+      var b = el('button', 'chip press' + (s[0] === state.s ? ' on' : ''), s[1]);
+      b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', s[0] === state.s);
+      b.onclick = function () { if (s[0] !== state.s) go({ s: s[0], o: 0 }); };
+      tabs.appendChild(b);
+    });
+    var on = tabs.querySelector('.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+    [].slice.call(seg.querySelectorAll('button')).forEach(function (b) { b.remove(); });
+    var idx = 0;
+    KINDS.forEach(function (k, i) {
+      if (k[0] === state.k) idx = i;
+      var b = el('button', k[0] === state.k ? 'on' : '', k[1]);
+      b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', k[0] === state.k);
+      b.onpointerdown = function () { if (k[0] !== state.k) { $('thumb').style.transform = 'translateX(' + (i * 100) + '%)'; } }; // respond on press
+      b.onclick = function () { if (k[0] !== state.k) go({ k: k[0], o: 0 }); };
+      seg.appendChild(b);
+    });
+    $('thumb').style.transform = 'translateX(' + (idx * 100) + '%)';
+    var all = state.k === 'all';
+    $('prev').disabled = all || (data && data.v.k === state.k && data.v.o === state.o && !data.hasOlder);
+    $('next').disabled = all || state.o === 0;
+    $('now').hidden = state.o === 0;
+    if (tg && tg.BackButton && !sheetOpen) { if (state.o > 0) tg.BackButton.show(); else tg.BackButton.hide(); }
+  }
+
+  // anim: true = cards rise in turn + numbers + bars; 'soft' = numbers + bars only (the pane is already sliding)
+  var anim = false;
+  function render(fade) {
+    var d = data;
+    anim = reduceMotion ? false : fade;
+    renderNav();
+    $('ttl').textContent = d.title;
+    $('per').textContent = d.period;
+    var body = $('body');
+    body.textContent = '';
+    if (d.notice) body.appendChild(el('div', 'notice', d.notice));
+    if (d.digests) body.appendChild(digestCard(d.digests));
+    if (d.empty) body.appendChild(el('div', 'empty', d.empty));
+    if (d.summary && d.summary.length) body.appendChild(summaryList(d.summary));
+    else if (d.kpis.length) {
+      var tiles = !!d.plan;
+      var grid = el('div', 'grid' + (tiles ? ' tiles' : ''));
+      var detailBlocks = d.blocks.filter(function (b) { return b.type === 'details' || b.type === 'table'; });
+      d.kpis.forEach(function (k, i) {
+        var c = kpi(tiles ? Object.assign({}, k, { l: k.l.replace(/^\S+\s/u, '') }) : k, !tiles && i === 0);
+        if (!tiles && i > 0 && i === d.kpis.length - 1 && (d.kpis.length - 1) % 2 === 1) c.classList.add('wide');
+        var open = null;
+        if (k.s && d.plan && d.plan[k.s]) open = function () { openSheet(k.l.replace(/^\S+\s/u, ''), function (box) { box.appendChild(itemList(d.plan[k.s], { empty: 'Пусто', group: k.s !== 'open' })); }); };
+        else if (detailBlocks.length) open = function () { openSheet(d.title, function (box) { var bl = el('div', 'blocks'); renderBlocks(d.blocks, bl, true); box.appendChild(bl); }); };
+        if (open) { c.classList.add('tap', 'press'); c.setAttribute('role', 'button'); c.onclick = open; }
+        grid.appendChild(c);
+      });
+      body.appendChild(grid);
+    }
+    if (d.plan) {
+      var qa = el('div', 'qa');
+      var add = el('button', 'press', '＋ Добавить'); add.onclick = function () { askSheet('Новое дело', ''); };
+      var mag = el('button', 'press', '🪄 Распределить'); mag.onclick = function () { askSheet('Распределить задачи', 'Распредели мои задачи на завтра по свободным окнам', true); };
+      qa.appendChild(add); qa.appendChild(mag);
+      body.appendChild(qa);
+      body.appendChild(agendaCard(d.plan.agenda, d));
+    }
+    if (d.money) body.appendChild(moneyCards(d.money));
+    if (d.routines && d.routines.length) body.appendChild(routinesCard(d.routines));
+    if (d.hyp) body.appendChild(hypCard(d.hyp));
+    if (d.chart && (d.chart.y.some(function (v) { return v > 0; }) || (d.chart.hiv || []).some(function (v) { return v > 0; }))) body.appendChild(chartCard(d.chart, d.color));
+    if (d.blocks.length) { var bl = el('div', 'blocks'); renderBlocks(d.blocks, bl); body.appendChild(bl); }
+    if (anim) { countUp(body); if (anim === true) stagger(body); }
+    renderFoot();
+  }
+
+  function stagger(root) {
+    var i = 0;
+    [].slice.call(root.children).forEach(function (c) {
+      var kids = c.classList.contains('grid') || c.classList.contains('sum') ? [].slice.call(c.children) : [c];
+      kids.forEach(function (k) { if (i > 5) return; k.classList.add('rise'); k.style.animationDelay = (i++ * 40) + 'ms'; });
+    });
+  }
+
+  /** "12 345", "7,5" → count up from zero, then restore the exact original text. */
+  function countUp(root) {
+    var nodes = [];
+    [].slice.call(root.querySelectorAll('.v, .sv, .fv')).forEach(function (v) {
+      [].slice.call(v.childNodes).forEach(function (n) { if (n.nodeType === 3 && /^\d[\d\s\u00a0\u202f]*(,\d+)?\s*$/.test(n.nodeValue)) nodes.push(n); });
+    });
+    if (!nodes.length) return;
+    var items = nodes.map(function (n) {
+      var raw = n.nodeValue, t = raw.replace(/[\s\u00a0\u202f]/g, ''), dec = (t.split(',')[1] || '').length;
+      return { n: n, raw: raw, to: parseFloat(t.replace(',', '.')), dec: dec, tail: /\s$/.test(raw) ? raw.slice(raw.replace(/\s+$/, '').length) : '' };
+    });
+    var t0 = 0, D = anim === true ? 500 : 380;
+    function step(t) {
+      if (!t0) t0 = t;
+      var p = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - p, 3);
+      items.forEach(function (it) {
+        it.n.nodeValue = p >= 1 ? it.raw : (it.to * e).toLocaleString('ru-RU', { minimumFractionDigits: it.dec, maximumFractionDigits: it.dec }) + it.tail;
+      });
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function deltaText(x) {
+    var a = Math.abs(x * 100);
+    return (a < 0.5 ? '→ ' : x > 0 ? '↑ ' : '↓ ') + a.toFixed(a < 10 ? 1 : 0).replace('.', ',') + '%';
+  }
+
+  function kpi(k, hero) {
+    var c = el('div', 'kpi' + (hero ? ' hero' : ''));
+    c.appendChild(el('div', 'l', k.l));
+    c.appendChild(valueEl(k.v, 'v'));
+    var m = el('div', 'm');
+    if (k.d != null) {
+      var flat = Math.abs(k.d) < 0.005;
+      var cls = k.g == null || flat ? '' : ((k.d > 0) === k.g ? ' g' : ' b');
+      var pill = el('span', 'dl' + cls + (anim === true ? ' pop' : ''), deltaText(k.d)); if (anim === true) pill.style.animationDelay = '200ms';
+      m.appendChild(pill);
+    }
+    if (k.n) m.appendChild(el('span', '', k.n));
+    else if (k.d != null) m.appendChild(el('span', '', hero ? 'к прошлому периоду' : 'к прошлому'));
+    c.appendChild(m);
+    return c;
+  }
+
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function sv(tag, attrs) { var e = document.createElementNS(SVGNS, tag); for (var a in attrs) e.setAttribute(a, attrs[a]); return e; }
+
+  var STAGES = [['deep', 'Глубокий', '#5856D6'], ['core', 'Основной', '#007AFF'], ['rem', 'REM', '#5AC8FA'], ['awake', 'Бодрствование', '#FF9F80']];
+  function hmFmt(h) { var m = Math.round(h * 60); return m >= 60 ? Math.floor(m / 60) + ' ч ' + String(m % 60).padStart(2, '0') + ' мин' : m + ' мин'; }
+
+  /** "7 ч 10 мин" → big numbers, small units — like the Health app. */
+  function valueEl(str, cls) {
+    var v = el('div', cls || 'v');
+    String(str).split(/(\d[\d\s  ,.:–-]*)/).forEach(function (part) {
+      if (!part) return;
+      if (/^\d/.test(part)) v.appendChild(document.createTextNode(part));
+      else v.appendChild(el('span', 'u', part));
+    });
+    return v;
+  }
+
+  // ---------------------------------------------------------------- routines (Plan tab)
+  var ICONS = {
+    run: '<svg viewBox="0 0 14 14" fill="currentColor"><path d="M4 2.5v9l7.5-4.5z"/></svg>',
+    off: '<svg viewBox="0 0 14 14" fill="currentColor"><rect x="3.5" y="2.5" width="2.4" height="9" rx=".8"/><rect x="8.1" y="2.5" width="2.4" height="9" rx=".8"/></svg>',
+    on: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 2v5"/><path d="M10.2 4.2a4.5 4.5 0 1 1-6.4 0"/></svg>',
+    del: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h9M5.5 4V2.8h3V4M3.8 4l.6 7.2h5.2l.6-7.2"/></svg>',
+  };
+  function iconBtn(kind, label, onClick) {
+    var b = el('button', 'press');
+    b.innerHTML = ICONS[kind];
+    b.setAttribute('aria-label', label); b.title = label;
+    b.onclick = function (e) { e.stopPropagation(); onClick(b); };
+    return b;
+  }
+  function routineAct(r, a, btn) {
+    var doIt = function () {
+      btn.disabled = true; haptic('light');
+      api('/api/routine?id=' + r.id + '&a=' + a, 'POST').then(function (j) {
+        try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+        if (a === 'run' && tg && tg.showAlert) tg.showAlert('Запущу в течение минуты — результат придёт в чат.');
+        data.routines = j.routines; render(false);
+      }).catch(function (e) { btn.disabled = false; if (tg && tg.showAlert) tg.showAlert(e.message); });
+    };
+    if (a === 'del') { if (tg && tg.showConfirm) tg.showConfirm('Удалить «' + r.title + '»?', function (ok) { if (ok) doIt(); }); else if (confirm('Удалить «' + r.title + '»?')) doIt(); }
+    else doIt();
+  }
+  function routinesCard(list) {
+    var c = el('div', 'rt');
+    c.appendChild(el('h4', '', 'Регулярные действия'));
+    list.forEach(function (r) {
+      var row = el('div', 'rti' + (r.on ? '' : ' off'));
+      row.appendChild(el('div', 'ic', r.on ? (r.kind === 'watch' ? '👀' : r.kind === 'search' ? '🔎' : '🔁') : '⏸'));
+      var tx = el('div', 'tx');
+      tx.appendChild(el('div', 'tt', r.title));
+      tx.appendChild(el('div', 'wh', [r.when, r.channels, r.next ? 'дальше ' + r.next : (r.on ? '' : 'на паузе')].filter(Boolean).join(' · ')));
+      if (r.result) tx.appendChild(el('div', 'rs', (r.last ? r.last + ': ' : '') + r.result));
+      row.appendChild(tx);
+      var bt = el('div', 'bt');
+      bt.appendChild(iconBtn('run', 'Запустить сейчас', function (b) { routineAct(r, 'run', b); }));
+      bt.appendChild(r.on ? iconBtn('off', 'Пауза', function (b) { routineAct(r, 'off', b); }) : iconBtn('on', 'Включить', function (b) { routineAct(r, 'on', b); }));
+      bt.appendChild(iconBtn('del', 'Удалить', function (b) { routineAct(r, 'del', b); }));
+      row.appendChild(bt);
+      c.appendChild(row);
+    });
+    c.appendChild(el('div', 'hint', 'Новые — сообщением боту: «каждый вечер в 21:30 присылай итоги дня», «следи за каналом @name…».'));
+    return c;
+  }
+
+  // ---------------------------------------------------------------- lists (Plan)
+  function itemRow(it) {
+    var r = el('div', 'li tap press' + (it.done ? ' done' : ''));
+    r.onclick = function () { itemSheet(it); };
+    var tm = el('div', 'tm', it.time && it.time !== 'весь день' ? it.time.split('–')[0] : '—');
+    if (it.time && it.time.indexOf('–') > 0) tm.appendChild(el('small', '', 'до ' + it.time.split('–')[1]));
+    else if (it.time === 'весь день') { tm.textContent = 'день'; }
+    r.appendChild(tm);
+    r.appendChild(el('span', 'ic2', it.ic));
+    var tx = el('div', 'tx'), tt = el('div', 'tt', it.t);
+    if (it.pr) tt.appendChild(el('span', 'pr', '!'));
+    tx.appendChild(tt);
+    if (it.sub) tx.appendChild(el('div', 'sb2', it.sub));
+    r.appendChild(tx);
+    return r;
+  }
+  /** Items grouped by day, like Calendar's list view. */
+  function itemList(items, o) {
+    o = o || {};
+    var box = el('div');
+    if (!items.length) { box.appendChild(el('div', 'empty', o.empty || 'Пусто')); return box; }
+    var card = null, last = null, shown = 0;
+    items.forEach(function (it) {
+      if (o.limit && shown >= o.limit) return;
+      var g = o.group === false ? '' : it.day;
+      if (!card || g !== last) { card = el('div', 'ls'); if (g) card.appendChild(el('h4', '', g.charAt(0).toUpperCase() + g.slice(1))); box.appendChild(card); last = g; }
+      card.appendChild(itemRow(it)); shown++;
+    });
+    return box;
+  }
+  function agendaCard(items, d) {
+    var box = el('div');
+    if (!items.length) return box;
+    var limit = 8, list = itemList(items, { limit: limit });
+    [].slice.call(list.children).forEach(function (c) { box.appendChild(c); });
+    if (items.length > limit) {
+      var last = box.lastChild, more = el('button', 'more press', 'Все ' + items.length + ' →');
+      more.onclick = function () { openSheet('Расписание', function (b) { b.appendChild(itemList(items)); }); };
+      last.appendChild(more);
+    }
+    return box;
+  }
+
+  // ---------------------------------------------------------------- plan item actions
+  function post(path, opts) {
+    opts = opts || {};
+    return fetch(path, { method: 'POST', headers: Object.assign({ Authorization: 'tma ' + initData }, opts.headers || {}), body: opts.body }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
+    });
+  }
+  function afterChange(msg) {
+    try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+    cache = {}; closeSheet(0);
+    load({ silent: true, keepSel: true });
+  }
+  function act(it, a, to, btn) {
+    if (btn) btn.disabled = true;
+    post('/api/item?id=' + it.id + '&a=' + a + (to ? '&to=' + encodeURIComponent(to) : '')).then(afterChange)
+      .catch(function (e) { if (btn) btn.disabled = false; if (tg && tg.showAlert) tg.showAlert(e.message); else alert(e.message); });
+  }
+  function itemSheet(it) {
+    openSheet(it.t, function (box) {
+      var when = it.at ? (it.day.charAt(0).toUpperCase() + it.day.slice(1)) + (it.time && it.time !== 'весь день' ? ', ' + it.time : '') : 'Без срока';
+      var info = el('div', 'info'); info.appendChild(el('b', '', it.ic + ' ' + when));
+      if (it.sub) { info.appendChild(el('br')); info.appendChild(document.createTextNode(it.sub)); }
+      box.appendChild(info);
+      if (it.src === 'icloud') { box.appendChild(el('div', 'lbl', 'Из Календаря iPhone')); box.appendChild(el('div', 'info', 'Это событие меняется в самом Календаре — бот только показывает его.')); return; }
+      var b = el('div', 'btns');
+      if (!it.done) { var d1 = el('button', 'btn primary press', it.kind === 'event' ? '✅ Прошло' : '✅ Готово'); d1.onclick = function () { act(it, 'done', null, d1); }; b.appendChild(d1); }
+      else { var u = el('button', 'btn press', '↩︎ Вернуть в работу'); u.onclick = function () { act(it, 'undo', null, u); }; b.appendChild(u); }
+      box.appendChild(b);
+      box.appendChild(el('div', 'lbl', 'Перенести'));
+      var ch = el('div', 'chips');
+      [['today', 'Сегодня'], ['tomorrow', 'Завтра'], ['after', 'Послезавтра'], ['week', '+ неделя']].forEach(function (x) {
+        var c = el('button', 'press', x[1]); c.onclick = function () { act(it, 'move', x[0], c); }; ch.appendChild(c);
+      });
+      box.appendChild(ch);
+      var dt = el('input', 'dt'); dt.type = 'datetime-local'; dt.style.marginTop = '.5rem';
+      if (it.at) dt.value = it.at.length > 10 ? it.at : it.at + 'T09:00';
+      dt.onchange = function () { if (dt.value) act(it, 'move', dt.value.slice(0, 16)); };
+      box.appendChild(dt);
+      if (it.src !== 'reminders') {
+        var del = el('button', 'btn danger press', '🗑 Удалить'); del.style.marginTop = '1rem';
+        del.onclick = function () {
+          var go2 = function (ok) { if (ok) act(it, 'del', null, del); };
+          if (tg && tg.showConfirm) tg.showConfirm('Удалить «' + it.t + '»?', go2); else go2(confirm('Удалить «' + it.t + '»?'));
+        };
+        box.appendChild(del);
+      } else box.appendChild(el('div', 'lbl', 'Из «Напоминаний»: удалить можно только в приложении'));
+    });
+  }
+
+  // ---------------------------------------------------------------- assistant box (text or voice)
+  var MIC = '<svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6.5" y="1.5" width="5" height="9" rx="2.5"/><path d="M3.5 8.5a5.5 5.5 0 0 0 11 0M9 14v2.5"/></svg>';
+  function askSheet(title, prefill, autoSend) {
+    openSheet(title, function (box) {
+      var ta = el('textarea', 'ask'); ta.placeholder = 'Например: «завтра в 15 созвон с Ромой», «купить зарядку до пятницы», «кофе 350»';
+      ta.value = prefill || '';
+      box.appendChild(ta);
+      var row = el('div', 'askrow');
+      var mic = el('button', 'mic press'); mic.innerHTML = MIC; mic.setAttribute('aria-label', 'Голосом');
+      var send = el('button', 'btn primary press', 'Отправить');
+      row.appendChild(mic); row.appendChild(send); box.appendChild(row);
+      var out = el('div'); box.appendChild(out);
+      function show(j) {
+        out.textContent = '';
+        var r = el('div', 'reply');
+        if (j.heard) r.appendChild(el('span', 'heard', '🎙 ' + j.heard));
+        r.appendChild(document.createTextNode(j.text));
+        (j.notes || []).forEach(function (n) { r.appendChild(el('span', 'note', n)); });
+        out.appendChild(r);
+        cache = {}; load({ silent: true, keepSel: true });
+      }
+      function busy(on, label) { send.disabled = on; mic.disabled = on && !rec; send.textContent = on ? (label || 'Думаю…') : 'Отправить'; }
+      function fail(e) { busy(false); if (tg && tg.showAlert) tg.showAlert(e.message); else alert(e.message); }
+      send.onclick = function () {
+        var t = ta.value.trim(); if (!t) return;
+        busy(true); haptic('light');
+        post('/api/ask', { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: t }) }).then(function (j) { busy(false); ta.value = ''; show(j); }).catch(fail);
+      };
+      var rec = null, chunks = [];
+      mic.onclick = function () {
+        if (rec) { rec.stop(); return; }
+        if (!navigator.mediaDevices || !window.MediaRecorder) return fail(new Error('Микрофон здесь недоступен — отправь голосовое боту в чат.'));
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+          var type = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+          rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined); chunks = [];
+          rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+          rec.onstop = function () {
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            mic.classList.remove('rec'); var blob = new Blob(chunks, { type: rec.mimeType || type || 'audio/webm' }); rec = null;
+            busy(true, 'Слушаю…');
+            post('/api/ask', { headers: { 'Content-Type': blob.type || 'application/octet-stream' }, body: blob }).then(function (j) { busy(false); show(j); }).catch(fail);
+          };
+          rec.start(); mic.classList.add('rec'); haptic('medium');
+        }).catch(function () { fail(new Error('Нет доступа к микрофону. Разреши его Telegram в настройках iPhone или отправь голосовое в чат.')); });
+      };
+      if (autoSend) setTimeout(function () { send.onclick(); }, 50);
+      else setTimeout(function () { try { ta.focus(); } catch (e) {} }, 350);
+    });
+  }
+
+  // ---------------------------------------------------------------- money: budgets and subscriptions
+  function moneyCards(m) {
+    var box = el('div');
+    var bc = el('div', 'ls'); bc.appendChild(el('h4', '', 'Бюджеты на месяц'));
+    if (!m.budgets.length) bc.appendChild(el('div', 'bud', 'Скажи боту: «бюджет на продукты 15 000 в месяц» — предупрежу при 80% и 100%.'));
+    m.budgets.forEach(function (b) {
+      var r = el('div', 'bud'), h = el('div', 'bh');
+      h.appendChild(el('span', '', b.ic + ' ' + b.c)); h.appendChild(el('b', '', b.spent + ' / ' + b.limit));
+      r.appendChild(h);
+      var bar = el('div', 'bar'), fill = el('i', (b.pct >= 1 ? 'over' : b.pct >= 0.8 ? 'warn' : '') + (anim ? ' grow-x' : ''));
+      fill.style.width = Math.min(100, Math.round(b.pct * 100)) + '%'; bar.appendChild(fill); r.appendChild(bar);
+      r.appendChild(el('div', 'bs', b.pct >= 1 ? 'превышен на ' + Math.round((b.pct - 1) * 100) + '%' : 'осталось ' + b.left + ' · ' + Math.round(b.pct * 100) + '%'));
+      bc.appendChild(r);
+    });
+    box.appendChild(bc);
+    var sc = el('div', 'ls'); sc.appendChild(el('h4', '', 'Подписки' + (m.subsTotal ? ' · ' + m.subsTotal + ' в месяц' : '')));
+    if (!m.subs.length) sc.appendChild(el('div', 'bud', 'Скажи боту: «Яндекс Плюс 399 каждое 5-е число» — напомню накануне и сам запишу трату.'));
+    m.subs.forEach(function (x) {
+      var r = el('div', 'li sub' + (x.active ? '' : ' done'));
+      r.appendChild(el('span', 'ic2', x.icon));
+      var tx = el('div', 'tx'); tx.appendChild(el('div', 'tt', x.title)); tx.appendChild(el('div', 'sb2' + (x.soon ? ' soon' : ''), (x.active ? 'спишется ' + x.next : 'отключена')));
+      r.appendChild(tx); r.appendChild(el('div', 'tm', x.price));
+      sc.appendChild(r);
+    });
+    box.appendChild(sc);
+    return box;
+  }
+
+  // ---------------------------------------------------------------- bottom sheet (spring, drag to dismiss)
+  var sheetOpen = false;
+  var sheetSpring = new Spring(function (y) {
+    var H = $('sp').offsetHeight || innerHeight;
+    $('sp').style.transform = 'translate3d(0,' + y + 'px,0)';
+    $('sbk').style.opacity = String(Math.max(0, Math.min(1, 1 - y / H)));
+  });
+  function openSheet(title, fill) {
+    haptic('light');
+    $('stt').textContent = title;
+    var sc = $('sc'); sc.textContent = ''; sc.scrollTop = 0;
+    fill(sc);
+    var was = anim; anim = reduceMotion ? false : 'soft'; countUp(sc); anim = was;
+    $('sheet').hidden = false; sheetOpen = true;
+    document.documentElement.style.overflow = 'hidden';
+    var H = $('sp').offsetHeight;
+    sheetSpring.set(H);
+    sheetSpring.to(0, { response: 0.42, damping: 0.88 });
+    if (tg && tg.BackButton) tg.BackButton.show();
+  }
+  function closeSheet(velocity) {
+    if (!sheetOpen) return;
+    sheetOpen = false;
+    sheetSpring.to($('sp').offsetHeight, { velocity: velocity || 0, response: 0.3, damping: 1, done: function () {
+      $('sheet').hidden = true; document.documentElement.style.overflow = '';
+      if (tg && tg.BackButton) { if (state.o > 0) tg.BackButton.show(); else tg.BackButton.hide(); }
+    } });
+  }
+  $('sbk').onclick = function () { closeSheet(0); };
+  $('sx').onclick = function () { closeSheet(0); };
+  (function () {
+    var st = null, hist = [];
+    function down(e) { st = { y: e.clientY, id: e.pointerId, base: sheetSpring.x || 0, t0: e.timeStamp }; hist = [{ y: e.clientY, t: e.timeStamp }]; try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {} cancelAnimationFrame(sheetSpring.raf); sheetSpring.raf = 0; }
+    function move(e) {
+      if (!st || e.pointerId !== st.id) return;
+      var dy = e.clientY - st.y; hist.push({ y: e.clientY, t: e.timeStamp }); if (hist.length > 6) hist.shift();
+      sheetSpring.x = dy > 0 ? dy : -Math.sqrt(-dy) * 2; sheetSpring.onUpdate(sheetSpring.x);
+    }
+    function up(e) {
+      if (!st || e.pointerId !== st.id) return; var st0 = st.t0; st = null;
+      var a = hist[0], b = hist[hist.length - 1], v = (b.y - a.y) / Math.max(1, b.t - a.t) * 1000;
+      // Dismiss on distance (a quarter of the sheet), a flick, or a steady drag (> 0.11 px/ms on average).
+      var H = $('sp').offsetHeight, avg = sheetSpring.x / Math.max(1, e.timeStamp - (st0 || e.timeStamp));
+      if (sheetSpring.x > H * 0.25 || v > 400 || (sheetSpring.x > 40 && avg > 0.11)) closeSheet(v); else sheetSpring.to(0, { velocity: v, damping: 0.9 });
+    }
+    ['sgr', 'shd'].forEach(function (id) { var n = $(id); n.addEventListener('pointerdown', function (e) { if (e.target.closest('button')) return; down(e); }); n.addEventListener('pointermove', move); n.addEventListener('pointerup', up); n.addEventListener('pointercancel', up); });
+    // pull down from the top of the content also dismisses
+    var sc = $('sc');
+    sc.addEventListener('pointerdown', function (e) { if (sc.scrollTop <= 0 && e.pointerType !== 'mouse') { st = { y: e.clientY, id: e.pointerId, base: 0, soft: true, t0: e.timeStamp }; hist = [{ y: e.clientY, t: e.timeStamp }]; } });
+    sc.addEventListener('pointermove', function (e) { if (!st || !st.soft || e.pointerId !== st.id) return; var dy = e.clientY - st.y; if (dy < 0 || sc.scrollTop > 0) { st = null; sheetSpring.to(0); return; } move(e); });
+    sc.addEventListener('pointerup', function (e) { if (st && st.soft) up(e); });
+    sc.addEventListener('pointercancel', function (e) { if (st && st.soft) up(e); });
+  })();
+
+  // ---------------------------------------------------------------- AI digest (Overview)
+  var digestKind = null, dgOpen = false;
+  var REFRESH = '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 5.5A4.7 4.7 0 0 0 3 4.2M2.5 8.5A4.7 4.7 0 0 0 11 9.8"/><path d="M3 1.8v2.6h2.6M11 12.2V9.6H8.4"/></svg>';
+  function dgWhen(d) {
+    var today = new Date(); var iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    return (d.date === iso ? 'сегодня ' : d.date.slice(8, 10) + '.' + d.date.slice(5, 7) + ' ') + d.at.slice(11, 16);
+  }
+  function digestCard(dg) {
+    var kinds = ['morning', 'evening'].filter(function (k) { return dg[k]; });
+    var cur = digestKind && dg[digestKind] ? digestKind : kinds.sort(function (a, b) { return dg[b].at.localeCompare(dg[a].at); })[0] || null;
+    var c = el('div', 'dg');
+    var h = el('div', 'dgh');
+    var d = cur ? dg[cur] : null;
+    var k = el('div', 'k', d ? (cur === 'morning' ? '🌅 Утренний разбор' : '🌙 Вечерний разбор') : '🧠 Разбор дня');
+    if (d) k.appendChild(el('span', 'at', dgWhen(d)));
+    h.appendChild(k);
+    if (kinds.length > 1) {
+      var mini = el('div', 'mini');
+      [['morning', 'Утро'], ['evening', 'Вечер']].forEach(function (x) {
+        var b = el('button', x[0] === cur ? 'on' : '', x[1]);
+        b.onclick = function () { if (x[0] === cur) return; digestKind = x[0]; haptic(); swapCard(c, dg); };
+        mini.appendChild(b);
+      });
+      h.appendChild(mini);
+    }
+    var rf = el('button', 'rf press'); rf.innerHTML = REFRESH; rf.setAttribute('aria-label', 'Обновить разбор');
+    var want = cur || (new Date().getHours() < 15 ? 'morning' : 'evening');
+    rf.onclick = function () { refreshDigest(want, rf, c, dg); };
+    h.appendChild(rf);
+    c.appendChild(h);
+    if (!d) {
+      var e = el('div', 'dge', 'ИИ разбирает сон, активность, план и траты в ' + '08:00 и 21:30: что заметил и что сделать. Можно получить сейчас.');
+      e.appendChild(el('br'));
+      var go1 = el('button', 'press', 'Сделать разбор'); go1.onclick = function () { refreshDigest(want, rf, c, dg); };
+      e.appendChild(go1);
+      c.appendChild(e);
+      return c;
+    }
+    if (d.headline) c.appendChild(el('div', 'hl', d.headline));
+    function list(title, items, tag) {
+      if (!items || !items.length) return;
+      var sec = el('div', 'dgs'); sec.appendChild(el('h5', '', title));
+      var ul = el(tag); items.forEach(function (x) { ul.appendChild(el('li', '', x)); }); sec.appendChild(ul);
+      c.appendChild(sec);
+    }
+    list('Что сделать', d.recs, 'ol');
+    list('Что заметил', d.insights, 'ul');
+    if (d.facts.length) {
+      var det = el('details', 'dgf'), sm = el('summary', '', 'Цифры дня');
+      sm.appendChild(el('span', 'cnt', String(d.facts.length)));
+      det.appendChild(sm);
+      if (dgOpen) det.open = true;
+      det.addEventListener('toggle', function () { dgOpen = det.open; haptic(); });
+      d.facts.forEach(function (f) {
+        var r = el('div', 'fr');
+        r.appendChild(el('div', 'fi', f.icon));
+        var t = el('div', 'ft'); t.appendChild(el('div', 'fl', f.label)); if (f.note) t.appendChild(el('div', 'fn', f.note));
+        r.appendChild(t);
+        r.appendChild(el('div', 'fv' + (f.tone ? ' ' + f.tone : ''), f.value));
+        det.appendChild(r);
+      });
+      c.appendChild(det);
+    }
+    if (!d.headline && !d.recs.length) c.appendChild(el('div', 'dge', d.error ? 'ИИ не ответил: ' + d.error : 'Выводов нет — мало данных.'));
+    return c;
+  }
+  function swapCard(old, dg) {
+    var n = digestCard(dg);
+    if (!reduceMotion) { n.classList.add('rise'); }
+    old.replaceWith(n);
+    var was = anim; anim = 'soft'; countUp(n); anim = was;
+  }
+  function refreshDigest(kind, btn, card, dg) {
+    if (btn.classList.contains('spin')) return;
+    btn.classList.add('spin'); haptic('light');
+    var wait = card.querySelector('.dge button'); if (wait) { wait.disabled = true; wait.textContent = 'Думаю…'; }
+    fetch('/api/digest?k=' + kind, { method: 'POST', headers: { Authorization: 'tma ' + initData } }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; });
+    }).then(function (j) {
+      try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+      dg[kind] = j.digest; digestKind = kind;
+      if (data && data.digests) data.digests = dg;
+      swapCard(card, dg);
+    }).catch(function (e) {
+      btn.classList.remove('spin'); if (wait) { wait.disabled = false; wait.textContent = 'Сделать разбор'; }
+      if (tg && tg.showAlert) tg.showAlert(e.message); else alert(e.message);
+    });
+  }
+
+  function summaryList(items) {
+    var wrap = el('div', 'sum');
+    items.forEach(function (it) {
+      var c = el('button', 'scard press');
+      c.style.setProperty('--c', it.color);
+      var h = el('div', 'sh');
+      h.appendChild(el('span', 'sn', it.icon + ' ' + it.name));
+      h.appendChild(el('span', 'chev'));
+      c.appendChild(h);
+      var row = el('div', 'srow'), left = el('div', 'sl');
+      left.appendChild(valueEl(it.value, 'sv'));
+      var sub = el('div', 'ss');
+      if (it.delta != null && Number.isFinite(it.delta)) {
+        var flat = Math.abs(it.delta) < 0.005;
+        sub.appendChild(el('span', 'dl' + (it.good == null || flat ? '' : ((it.delta > 0) === it.good ? ' g' : ' b')), deltaText(it.delta)));
+      }
+      if (it.sub) sub.appendChild(el('span', '', it.sub));
+      left.appendChild(sub);
+      row.appendChild(left);
+      row.appendChild(spark(it.spark, it.color));
+      c.appendChild(row);
+      c.onclick = function () { go({ s: it.s }); };
+      wrap.appendChild(c);
+    });
+    return wrap;
+  }
+
+  function spark(y, color) {
+    var W = 76, H = 38, n = Math.max(1, y.length), max = Math.max.apply(null, y.concat([1])), step = W / n, bw = Math.max(2, step * 0.62);
+    var svg = sv('svg', { 'class': 'spark', viewBox: '0 0 ' + W + ' ' + H, 'aria-hidden': 'true' });
+    for (var i = 0; i < y.length; i++) {
+      var h = y[i] > 0 ? Math.max(3, (H - 2) * y[i] / max) : 2;
+      var r = sv('rect', { x: i * step + (step - bw) / 2, y: H - h, width: bw, height: h, rx: Math.min(2, bw / 2), fill: y[i] > 0 ? color : 'currentColor', 'fill-opacity': y[i] > 0 ? (i === y.length - 1 ? 1 : 0.45) : 0.12 });
+      if (anim === true) { r.classList.add('grow'); r.style.animationDelay = (120 + i * 16) + 'ms'; }
+      svg.appendChild(r);
+    }
+    return svg;
+  }
+
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function sv(tag, attrs) { var e = document.createElementNS(SVGNS, tag); for (var a in attrs) e.setAttribute(a, attrs[a]); return e; }
+
+  function chartCard(c, color) {
+    var card = el('div', 'card');
+    var head = el('div', 'chead');
+    head.appendChild(el('div', 'cname', c.name));
+    if (c.avg) head.appendChild(el('div', 'cavg', 'в среднем ' + c.avg));
+    card.appendChild(head);
+    var svg = sv('svg', { 'class': 'ch', role: 'img', 'aria-label': c.name });
+    card.appendChild(svg);
+    var tip = el('div', 'tip');
+    card.appendChild(tip);
+    var legend = null;
+    if (c.stack) {
+      legend = el('div', 'legend');
+      card.appendChild(legend);
+    }
+    var a = anim;
+    if (a === 'soft') svg.classList.add('reveal');
+    requestAnimationFrame(function () { drawChart(svg, tip, c, color || '#007AFF', legend, a); });
+    return card;
+  }
+
+  function capsule(x, y1, y2, w, fill, op) {
+    var h = Math.max(w, y2 - y1), r = w / 2;
+    return sv('rect', { x: x, y: y2 - h, width: w, height: h, rx: r, fill: fill, 'fill-opacity': op == null ? 1 : op });
+  }
+
+  function drawChart(svg, tip, c, color, legend, a) {
+    var W = svg.clientWidth || 320, H = 160, top = 16, bottom = 18, plotH = H - top - bottom;
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.textContent = '';
+    var cs = getComputedStyle(document.documentElement);
+    var n = c.y.length, step = W / n, gap = Math.max(1, Math.min(4, step * 0.22)), bw = Math.max(1, step - gap);
+    var base = top + plotH, i, j;
+    var range = !!(c.lo && c.hiv), stack = !!c.stack;
+    var lo = 0, max;
+    if (range) {
+      var vals = c.lo.concat(c.hiv).filter(function (v) { return v > 0; });
+      lo = Math.max(0, Math.floor((Math.min.apply(null, vals) - 8) / 10) * 10); max = Math.ceil((Math.max.apply(null, vals) + 5) / 10) * 10;
+    } else if (stack) max = Math.max.apply(null, c.stack.map(function (s) { return s[0] + s[1] + s[2] + s[3]; })) || 1;
+    else max = Math.max.apply(null, c.y) || 1;
+    var Y = function (v) { return base - plotH * (v - lo) / (max - lo || 1); };
+    svg.appendChild(sv('line', { x1: 0, x2: W, y1: base + .5, y2: base + .5, stroke: 'currentColor', 'stroke-opacity': .15 }));
+    var groups = [];
+    for (i = 0; i < n; i++) {
+      var g = sv('g', {}), x = i * step + gap / 2;
+      if (range) {
+        if (c.hiv[i] > 0) {
+          var w = Math.min(bw, 9), cx = x + (bw - w) / 2;
+          g.appendChild(capsule(cx, Y(c.hiv[i]), Y(c.lo[i] || c.y[i]), w, color));
+          g.appendChild(sv('circle', { cx: cx + w / 2, cy: Y(c.y[i]), r: Math.min(3, w / 2 - 0.5), fill: 'var(--card)' }));
+        }
+      } else if (stack) {
+        var acc = 0, s = c.stack[i];
+        for (j = 0; j < 4; j++) {
+          if (!s[j]) continue;
+          var y0 = Y(acc), y1 = Y(acc + s[j]); acc += s[j];
+          g.appendChild(sv('rect', { x: x, y: y1, width: bw, height: Math.max(1, y0 - y1 - (acc > s[j] ? 1 : 0)), rx: Math.min(2, bw / 3), fill: STAGES[j][2] }));
+        }
+        if (!acc) g.appendChild(sv('rect', { x: x, y: base - 2, width: bw, height: 2, rx: 1, fill: 'currentColor', 'fill-opacity': .12 }));
+      } else {
+        var v = c.y[i], h = v > 0 ? Math.max(2, plotH * v / max) : 0;
+        if (h > 0) {
+          var rr = Math.min(4, bw / 2, h), yy = base - h;
+          g.appendChild(sv('path', { d: 'M' + x + ',' + base + 'V' + (yy + rr) + 'Q' + x + ',' + yy + ' ' + (x + rr) + ',' + yy + 'H' + (x + bw - rr) + 'Q' + (x + bw) + ',' + yy + ' ' + (x + bw) + ',' + (yy + rr) + 'V' + base + 'Z', fill: color }));
+        } else g.appendChild(sv('rect', { x: x, y: base - 2, width: bw, height: 2, rx: 1, fill: 'currentColor', 'fill-opacity': .12 }));
+      }
+      if (a === true) { g.classList.add('grow'); g.style.animationDelay = Math.round(i * Math.min(16, 240 / n)) + 'ms'; }
+      groups.push(g); svg.appendChild(g);
+    }
+    if (c.avgY && !stack) {
+      var ay = Y(c.avgY);
+      svg.appendChild(sv('line', { x1: 0, x2: W, y1: ay, y2: ay, stroke: 'currentColor', 'stroke-opacity': .35, 'stroke-dasharray': '3 3' }));
+    }
+    var ml = sv('text', { x: W - 2, y: 1, 'text-anchor': 'end', 'dominant-baseline': 'hanging' }); ml.textContent = stack ? Math.round(max) + ' ч' : fmtAxis(max); svg.appendChild(ml);
+    if (range) { var ll = sv('text', { x: W - 2, y: base - 3, 'text-anchor': 'end' }); ll.textContent = String(lo); svg.appendChild(ll); }
+    var every = Math.ceil(n / Math.max(2, Math.floor(W / 44)));
+    for (j = 0; j < n; j += every) { var t = sv('text', { x: j * step + step / 2, y: H - 3, 'text-anchor': 'middle' }); t.textContent = c.x[j]; svg.appendChild(t); }
+    svg.style.color = cs.getPropertyValue('--text');
+    var has = function (k) { return stack ? c.stack[k].some(function (v) { return v > 0; }) : range ? c.hiv[k] > 0 : c.y[k] > 0; };
+    var last = n - 1; while (last > 0 && !has(last)) last--;
+    var active = selected >= 0 && selected < n ? selected : c.hi >= 0 && has(c.hi) ? c.hi : last;
+    function pick(k) {
+      if (k < 0 || k >= n) return;
+      active = k;
+      groups.forEach(function (gg, m) { gg.setAttribute('opacity', m === k ? 1 : .45); });
+      tip.textContent = '';
+      tip.appendChild(document.createTextNode(c.d[k] + ' · '));
+      if (range && c.hiv[k] > 0) tip.appendChild(el('b', '', (c.lo[k] && c.lo[k] < c.y[k] ? c.lo[k] + '–' : 'средний ' + Math.round(c.y[k]) + ', макс ') + c.hiv[k] + ' уд/мин'));
+      else tip.appendChild(el('b', '', c.f[k]));
+      if (legend) {
+        legend.textContent = '';
+        STAGES.forEach(function (st, si) {
+          var it = el('div', 'lg');
+          var dot = el('span', 'dot'); dot.style.background = st[2]; it.appendChild(dot);
+          it.appendChild(el('span', 'ln', st[1]));
+          it.appendChild(el('b', '', c.stack[k][si] ? hmFmt(c.stack[k][si]) : '—'));
+          legend.appendChild(it);
+        });
+      }
+    }
+    pick(active);
+    function at(ev) {
+      var rect = svg.getBoundingClientRect();
+      var k = Math.max(0, Math.min(n - 1, Math.floor((ev.clientX - rect.left) / rect.width * n)));
+      if (k !== active) { pick(k); selected = k; haptic(); }
+    }
+    svg.addEventListener('pointerdown', function (ev) { try { svg.setPointerCapture(ev.pointerId); } catch (e) {} at(ev); });
+    svg.addEventListener('pointermove', function (ev) { if (ev.pointerType === 'mouse' || ev.buttons) at(ev); });
+  }
+
+  /** One night like the Health app: lanes for awake / REM / core / deep. */
+  function hypCard(hy) {
+    var card = el('div', 'card');
+    var head = el('div', 'chead');
+    head.appendChild(el('div', 'cname', 'Стадии сна'));
+    head.appendChild(el('div', 'cavg', hy.start + ' – ' + hy.end));
+    card.appendChild(head);
+    var svg = sv('svg', { 'class': 'ch hyp', role: 'img', 'aria-label': 'Стадии сна' });
+    card.appendChild(svg);
+    var a = anim;
+    requestAnimationFrame(function () {
+      var W = svg.clientWidth || 320, H = 150, lab = 92, lanes = ['awake', 'rem', 'core', 'deep'], lh = (H - 22) / 4;
+      svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+      var total = Math.max.apply(null, hy.segs.map(function (s) { return s.b; })) || 1, pw = W - lab;
+      lanes.forEach(function (ln, li) {
+        var st = STAGES.filter(function (s) { return s[0] === ln; })[0];
+        var t = sv('text', { x: 0, y: li * lh + lh / 2 + 4 }); t.textContent = st[1]; svg.appendChild(t);
+        svg.appendChild(sv('line', { x1: lab, x2: W, y1: li * lh + lh / 2, y2: li * lh + lh / 2, stroke: 'currentColor', 'stroke-opacity': .08 }));
+      });
+      hy.segs.forEach(function (s) {
+        var li = lanes.indexOf(s.st); if (li < 0) return;
+        var st = STAGES.filter(function (x) { return x[0] === s.st; })[0];
+        var x = lab + pw * s.a / total, w = Math.max(3, pw * (s.b - s.a) / total);
+        var r = sv('rect', { x: x, y: li * lh + 4, width: w, height: lh - 8, rx: Math.min(5, (lh - 8) / 2), fill: st[2] });
+        if (a) { r.classList.add('sweep'); r.style.animationDelay = Math.round(240 * s.a / total) + 'ms'; }
+        svg.appendChild(r);
+      });
+      var a = sv('text', { x: lab, y: H - 3 }); a.textContent = hy.start; svg.appendChild(a);
+      var b = sv('text', { x: W - 2, y: H - 3, 'text-anchor': 'end' }); b.textContent = hy.end; svg.appendChild(b);
+      svg.style.color = getComputedStyle(document.documentElement).getPropertyValue('--text');
+    });
+    return card;
+  }
+  function fmtAxis(v) { return v >= 10000 ? Math.round(v / 1000) + 'k' : v >= 100 ? String(Math.round(v)) : String(Math.round(v * 10) / 10).replace('.', ','); }
+
+  function inline(t, parent) {
+    if (typeof t === 'string') parent.appendChild(document.createTextNode(t));
+    else if (Array.isArray(t)) t.forEach(function (x) { inline(x, parent); });
+    else if (t && typeof t === 'object') { var e = el(t.type === 'bold' ? 'b' : t.type === 'italic' ? 'i' : 'span'); inline(t.text, e); parent.appendChild(e); }
+  }
+
+  function textOf(t) { return typeof t === 'string' ? t : Array.isArray(t) ? t.map(textOf).join('') : t && t.text ? textOf(t.text) : ''; }
+  /** On the page a details block is a row that opens a sheet; inside a sheet it is shown expanded. */
+  function renderBlocks(blocks, parent, inSheet) {
+    blocks.forEach(function (b) {
+      if (b.type === 'details' && !inSheet) {
+        var title = textOf(b.summary), m = title.match(/^(.*?)\s*\((\d+)\)\s*$/);
+        var row = el('button', 'nv press');
+        row.appendChild(el('span', '', m ? m[1] : title));
+        if (m) row.appendChild(el('span', 'cnt', m[2]));
+        row.appendChild(el('span', 'chev'));
+        row.onclick = function () { openSheet(m ? m[1] : title, function (box) { var bl = el('div', 'blocks'); renderBlocks(b.blocks || [], bl, true); box.appendChild(bl); }); };
+        parent.appendChild(row);
+        return;
+      }
+      if (b.type === 'details' && inSheet) { var h0 = el('h3'); inline(b.summary, h0); parent.appendChild(h0); renderBlocks(b.blocks || [], parent, true); return; }
+      if (b.type === 'heading') { var h = el('h3'); inline(b.text, h); parent.appendChild(h); }
+      else if (b.type === 'paragraph') { var p = el('p'); inline(b.text, p); parent.appendChild(p); }
+      else if (b.type === 'table') parent.appendChild(table(b.cells));
+      else if (b.type === 'details') {
+        var d = el('details'), s = el('summary'); inline(b.summary, s); d.appendChild(s);
+        renderBlocks(b.blocks || [], d);
+        s.addEventListener('click', function () { haptic(); });
+        parent.appendChild(d);
+      }
+    });
+  }
+
+  function table(rows) {
+    var w = el('div', 'tw'), t = el('table');
+    rows.forEach(function (r) {
+      var tr = el('tr');
+      r.forEach(function (c) { var cell = el(c.is_header ? 'th' : 'td', c.align === 'right' ? 'r' : ''); inline(c.text, cell); tr.appendChild(cell); });
+      t.appendChild(tr);
+    });
+    w.appendChild(t);
+    return w;
+  }
+
+  function ago(iso) {
+    if (!iso) return 'ещё не было';
+    var m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+    return m < 1 ? 'только что' : m < 60 ? m + ' мин назад' : m < 1440 ? Math.round(m / 60) + ' ч назад' : Math.round(m / 1440) + ' дн назад';
+  }
+
+  function renderFoot() {
+    var f = $('foot'); f.textContent = '';
+    if (!data) return;
+    var secs = data.sections, pg = el('div', 'pager');
+    secs.forEach(function (s) { pg.appendChild(el('i', s[0] === state.s ? 'on' : '')); });
+    if (secs.length > 1) f.appendChild(pg);
+    if (data.np) f.appendChild(el('div', 'np', '▶ ' + data.np));
+    var line = el('div');
+    line.appendChild(el('span', 'live' + (liveOk ? '' : ' off')));
+    line.appendChild(document.createTextNode('Здоровье: ' + ago(data.sync.health) + ' · Музыка: ' + ago(data.sync.music)));
+    f.appendChild(line);
+  }
+
+  function showError(msg) {
+    var body = $('body'); body.textContent = '';
+    var box = el('div', 'empty', msg || 'Не удалось загрузить данные');
+    var b = el('button', 'now press', 'Повторить'); b.onclick = function () { load(); };
+    box.appendChild(el('br')); box.appendChild(b);
+    body.appendChild(box);
+  }
+
+  // ---------------------------------------------------------------- live updates (long poll)
+  // Long poll on the Mac; in the cloud /api/wait answers at once, so wait between checks.
+  function poll() {
+    if (!initData) return;
+    var t0 = Date.now();
+    api('/api/wait?ver=' + ver).then(function (r) {
+      var was = liveOk; liveOk = true;
+      if (r.ver !== ver) cache = {};
+      if (r.ver !== ver && (state.o === 0 || fellBack)) { if (fellBack) state.o = 0; return load({ silent: true, keepSel: true, fb: fellBack }).then(function () { setTimeout(poll, 1000); }); }
+      if (!was) renderFoot();
+      setTimeout(poll, Date.now() - t0 < 3000 ? 30000 : 0);
+    }).catch(function () { liveOk = false; renderFoot(); setTimeout(poll, 10000); });
+  }
+
+  // ---------------------------------------------------------------- swipe between sections (1:1, momentum, rubber-band)
+  (function () {
+    var vp = $('viewport'), start = null, locked = null, hist = [], swipedAt = 0;
+    // A swipe that started on a card must not also open it.
+    vp.addEventListener('click', function (e) { if (Date.now() - swipedAt < 350) { e.stopPropagation(); e.preventDefault(); } }, true);
+    function rubberband(over, dim) { var c = 0.55; return (over * dim * c) / (dim + c * Math.abs(over)); }
+    function canGo(dx) { return canSection(dx > 0 ? 1 : -1); }
+    vp.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse' || e.target.closest('svg.ch, .tw, summary, .mini, .rf, .bt, .dge button')) return;
+      start = { x: e.clientX, y: e.clientY, id: e.pointerId, base: paneSpring.x }; // grab from the live position
+      locked = null; hist = [{ x: e.clientX, t: e.timeStamp }];
+    });
+    vp.addEventListener('pointermove', function (e) {
+      if (!start || e.pointerId !== start.id) return;
+      var dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (!locked) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return; // hysteresis before committing to a direction
+        locked = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'x' : 'y';
+        if (locked === 'y') { start = null; return; }
+        try { vp.setPointerCapture(e.pointerId); } catch (err) {}
+        cancelAnimationFrame(paneSpring.raf); paneSpring.raf = 0;
+      }
+      hist.push({ x: e.clientX, t: e.timeStamp }); if (hist.length > 6) hist.shift();
+      var x = start.base + dx;
+      paneSpring.x = canGo(x) ? x : rubberband(x, innerWidth);
+      paneSpring.onUpdate(paneSpring.x);
+    });
+    function end(e) {
+      if (!start || e.pointerId !== start.id) return;
+      var wasX = locked === 'x'; start = null;
+      if (!wasX) return;
+      swipedAt = Date.now();
+      var a = hist[0], b = hist[hist.length - 1], dt = Math.max(1, b.t - a.t);
+      var v = (b.x - a.x) / dt * 1000; // px/s
+      var projected = paneSpring.x + (v / 1000) * 0.998 / (1 - 0.998); // Apple's momentum projection
+      var W = innerWidth;
+      if (Math.abs(projected) > W * 0.5 && canGo(projected)) shiftSection(projected > 0 ? 1 : -1, v);
+      else paneSpring.to(0, { velocity: v, damping: 0.85 });
+    }
+    vp.addEventListener('pointerup', end);
+    vp.addEventListener('pointercancel', end);
+  })();
+
+  // ---------------------------------------------------------------- controls
+  $('prev').onclick = function () { shiftPeriod(1, 0); };
+  $('next').onclick = function () { if (state.o > 0) shiftPeriod(-1, 0); };
+  $('now').onclick = function () { go({ o: 0 }); };
+  var raf = 0;
+  window.addEventListener('scroll', function () { if (raf) return; raf = requestAnimationFrame(function () { raf = 0; document.documentElement.classList.toggle('scrolled', scrollY > 4); }); }, { passive: true });
+  var rw = 0;
+  window.addEventListener('resize', function () { clearTimeout(rw); rw = setTimeout(function () { if (data) render(); }, 120); });
+
+  applyTheme();
+  if (tg) {
+    tg.ready(); tg.expand();
+    try { tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) {}
+    var mobile = tg.platform === 'ios' || tg.platform === 'android' || tg.platform === 'android_x';
+    if (mobile && tg.isVersionAtLeast && tg.isVersionAtLeast('8.0') && !tg.isFullscreen) { try { tg.requestFullscreen(); } catch (e) {} }
+    tg.onEvent('themeChanged', function () { applyTheme(); if (data) render(); });
+    tg.BackButton && tg.BackButton.onClick(function () { if (sheetOpen) closeSheet(0); else go({ o: 0 }); });
+  }
+  if (!initData) { renderNav(); showError('Открой дашборд из Telegram: кнопка «Статистика» у бота.'); $('ttl').textContent = 'lifestats'; $('per').textContent = ''; return; }
+  load({ fb: true, fade: true }).then(poll);
+  setInterval(renderFoot, 60000);
+})();
+</script>
+</body>
+</html>

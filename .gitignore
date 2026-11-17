@@ -1,0 +1,16 @@
+# secrets and personal data — never commit
+.env
+.env.*
+!.env.example
+data/
+*.lsb
+*.db
+*.db-*
+telegram-pairing.txt
+
+# build output and tooling
+node_modules/
+api/index.mjs
+.vercel
+web/dist/
+.DS_Store

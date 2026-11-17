@@ -1,0 +1,10 @@
+# docker compose up -d   — then point a reverse proxy (Caddy, nginx, Cloudflare Tunnel) with HTTPS at port 3000.
+services:
+  lifestats:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./data:/app/data
